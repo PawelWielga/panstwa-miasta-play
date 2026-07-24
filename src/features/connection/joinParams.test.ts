@@ -8,6 +8,8 @@ describe('parseJoinParameters', () => {
   it('reports missing and malformed values', () => {
     const result = parseJoinParameters('?room=O0I111&peer=bad%20peer&protocol=x');
     expect(result.value).toBeNull();
-    expect(result.errors).toMatchObject({ room: expect.any(String), peer: expect.any(String), protocol: expect.any(String) });
+    expect(typeof result.errors.room).toBe('string');
+    expect(typeof result.errors.peer).toBe('string');
+    expect(typeof result.errors.protocol).toBe('string');
   });
 });

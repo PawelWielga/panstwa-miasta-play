@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type SyntheticEvent } from 'react';
 import { useApp } from '../../app/AppContext';
 import { Card, Layout } from '../../components/Layout';
 import { PLAYER_NAME_MAX_LENGTH } from '../../protocol/constants';
@@ -17,12 +17,12 @@ export function JoinScreen({ search = window.location.search }: { search?: strin
   const [errors, setErrors] = useState<Record<string, string>>({});
   const showTechnical = parsed.value === null;
 
-  const submit = (event: FormEvent): void => {
+  const submit = (event: SyntheticEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const normalizedName = name.trim();
     const nextErrors: Record<string, string> = {};
     if (!normalizedName) nextErrors.name = 'Wpisz nazwę gracza.';
-    if (normalizedName.length > PLAYER_NAME_MAX_LENGTH) nextErrors.name = `Nazwa może mieć maksymalnie ${PLAYER_NAME_MAX_LENGTH} znaki.`;
+    if (normalizedName.length > PLAYER_NAME_MAX_LENGTH) nextErrors.name = `Nazwa może mieć maksymalnie ${String(PLAYER_NAME_MAX_LENGTH)} znaki.`;
     const parameterErrors = validateJoinParameters(parameters);
     for (const [key, value] of Object.entries(parameterErrors)) if (value) nextErrors[key] = value;
     setErrors(nextErrors);

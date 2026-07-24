@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type PropsWithChildren } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type PropsWithChildren } from 'react';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
 import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createSubmit } from '../protocol/outgoing';
 import type { ClientMessage, HostMessage } from '../protocol/messages';
@@ -9,7 +9,7 @@ import type { JoinParameters } from '../features/connection/joinParams';
 import { createInitialState, gameReducer, type AppState } from '../state/gameStore';
 import { loadPlayerIdentity, savePlayerIdentity, updatePlayerIdentity, type PlayerIdentity, type StoredPlayerIdentity } from '../storage/playerIdentityStorage';
 
-interface AppActions {
+export interface AppActions {
   updateIdentity: (values: Pick<StoredPlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>) => PlayerIdentity;
   connect: (parameters: JoinParameters) => Promise<void>;
   cancel: () => void;
@@ -23,15 +23,16 @@ interface AppActions {
 interface AppContextValue { state: AppState; actions: AppActions }
 const AppContext = createContext<AppContextValue | null>(null);
 
-export interface AppProviderProps extends PropsWithChildren { transportFactory?: () => GameTransport; initialSearch?: string }
+export interface AppProviderProps extends PropsWithChildren { transportFactory?: () => GameTransport }
 
-export function AppProvider({ children, transportFactory = () => new PeerJsGameTransport(), initialSearch = window.location.search }: AppProviderProps) {
-  const initialIdentity = useMemo(loadPlayerIdentity, []);
+export function AppProvider({ children, transportFactory = () => new PeerJsGameTransport() }: AppProviderProps) {
+  const [initialIdentity] = useState(() => loadPlayerIdentity());
   const [state, dispatch] = useReducer(gameReducer, createInitialState(initialIdentity, null));
   const stateRef = useRef(state);
   const transportRef = useRef<GameTransport | null>(null);
   const reconnectRef = useRef({ startedAt: 0, attempt: 0, timer: 0, manuallyClosed: false, everConnected: false });
   const factoryRef = useRef(transportFactory);
+  const connectInternalRef = useRef<(parameters: JoinParameters, reconnecting: boolean) => Promise<void>>(() => Promise.resolve());
   useEffect(() => { stateRef.current = state; }, [state]);
 
   const send = useCallback((message: ClientMessage): void => {
@@ -45,7 +46,8 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
 
   const scheduleReconnect = useCallback((): void => {
     const current = reconnectRef.current;
-    if (current.manuallyClosed || !stateRef.current.joinParameters) return;
+    const parameters = stateRef.current.joinParameters;
+    if (current.manuallyClosed || parameters === null) return;
     if (current.startedAt === 0) current.startedAt = Date.now();
     if (!canAutoReconnect(current.startedAt, Date.now())) {
       dispatch({ type: 'connection', status: 'lost', error: 'Automatyczne ponowne łączenie nie powiodło się.' });
@@ -55,7 +57,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     dispatch({ type: 'connection', status: 'reconnecting' });
     current.timer = window.setTimeout(() => {
       current.attempt += 1;
-      void connectInternal(stateRef.current.joinParameters!, true);
+      void connectInternalRef.current(parameters, true);
     }, reconnectDelay(current.attempt));
   }, []);
 
@@ -85,9 +87,13 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       current.attempt = 0;
       dispatch({ type: 'connection', status: 'connected' });
     } catch {
-      if (!current.manuallyClosed) scheduleReconnect();
+      scheduleReconnect();
     }
   }, [handleMessage, onTransportState, scheduleReconnect]);
+
+  useEffect(() => {
+    connectInternalRef.current = connectInternal;
+  }, [connectInternal]);
 
   const connect = useCallback(async (parameters: JoinParameters): Promise<void> => {
     reconnectRef.current = { startedAt: 0, attempt: 0, timer: 0, manuallyClosed: false, everConnected: reconnectRef.current.everConnected };
@@ -177,7 +183,6 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     clearNotice: () => dispatch({ type: 'clear-notice' }),
   }), [cancel, connect, retry, send, updateIdentityAction]);
 
-  void initialSearch;
   return <AppContext.Provider value={{ state, actions }}>{children}</AppContext.Provider>;
 }
 
