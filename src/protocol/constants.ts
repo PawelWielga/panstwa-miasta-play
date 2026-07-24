@@ -1,4 +1,4 @@
-export const PROTOCOL_VERSION = 3;
+export const SUPPORTED_GAME_PROTOCOL_VERSION = 3;
 export const PEER_CONNECTION_LABEL = 'panstwa-miasta-game-v1';
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 export const PLAYER_NAME_MAX_LENGTH = 24;
@@ -9,7 +9,7 @@ export const RECONNECT_TOKEN_MAX_LENGTH = 128;
 export const REQUEST_ID_MAX_LENGTH = 128;
 export const ANSWER_MAX_LENGTH = 60;
 export const ROOM_CODE_LENGTH = 6;
-export const ROOM_CODE_PATTERN = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
+export const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/;
 export const HEARTBEAT_INTERVAL_MS = 2_000;
 export const HOST_TIMEOUT_MS = 6_000;
 export const CONNECT_TIMEOUT_MS = 10_000;

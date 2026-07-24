@@ -1,4 +1,4 @@
-import { hostMessageTypes, MAX_MESSAGE_BYTES, PROTOCOL_VERSION } from './constants';
+import { hostMessageTypes, MAX_MESSAGE_BYTES, SUPPORTED_GAME_PROTOCOL_VERSION } from './constants';
 import { encodedMessageSize } from './messageSize';
 import type { HostMessage, JsonValue } from './messages';
 import {
@@ -18,7 +18,7 @@ export function parseHostMessage(data: unknown): HostMessageParseResult {
   const metadata = pickMetadata(data);
   switch (data.type) {
     case 'room:players': {
-      if (data.protocolVersion !== PROTOCOL_VERSION || !Array.isArray(data.players)) return invalid();
+      if (data.protocolVersion !== SUPPORTED_GAME_PROTOCOL_VERSION || !Array.isArray(data.players)) return invalid();
       const players = data.players.map(parsePlayerProfile);
       if (players.some((player) => player === null)) return invalid();
       return ok({ type: data.type, protocolVersion: data.protocolVersion, players: players as NonNullable<(typeof players)[number]>[], ...metadata });

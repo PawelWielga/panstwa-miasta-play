@@ -9,7 +9,7 @@ export const identity: PlayerIdentity = {
 };
 export function appState(overrides: Partial<AppState> = {}): AppState {
   return {
-    identity, joinParameters: { roomId: 'ABC234', hostPeerId: 'host-peer', protocolVersion: 3 }, connectionStatus: 'connected', connectionError: null,
+    identity, joinParameters: { roomId: 'ABC234' }, connectionStatus: 'connected', connectionError: null,
     players: [identity.profile, { id: 'host', name: 'Host', emoji: '🎲', color: '#000000' }], snapshot: null,
     categories: [{ id: 'city', name: 'Miasto', order: 0 }], settings: { answerDurationSeconds: 90, roundCount: 5, maxPlayers: 8, speedBonusEnabled: false },
     hostControlsReview: true, currentLetter: 'A', deadlineAt: null, reviewSubmissions: [], reviewCategoryIndex: 0, revealResults: {}, roundScores: {}, finalScores: {},

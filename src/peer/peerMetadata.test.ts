@@ -1,3 +1,7 @@
 import { expect, it } from 'vitest';
+import { SUPPORTED_GAME_PROTOCOL_VERSION } from '../protocol/constants';
 import { createPeerMetadata } from './peerMetadata';
-it('creates Flutter-compatible PeerJS metadata', () => expect(createPeerMetadata(' abC234 ', 3)).toEqual({ room: 'ABC234', protocol: 3 }));
+
+it('creates Flutter-compatible PeerJS metadata from the room code only', () => {
+  expect(createPeerMetadata(' abC123 ')).toEqual({ room: 'ABC123', protocol: SUPPORTED_GAME_PROTOCOL_VERSION });
+});

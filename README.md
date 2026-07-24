@@ -43,35 +43,36 @@ Testy PeerJS korzystają z interfejsu transportu i mocków. Nie łączą się z 
 
 ## Link zaproszenia
 
-Aplikacja Android generuje link:
+Aplikacja Android generuje link zawierający wyłącznie kod pokoju:
 
 ```text
-https://twoj-adres.example/?room=ABC234&peer=PEER_ID&protocol=3
+https://gra.dihor.pl/?room=ABC123
 ```
 
-Parametry:
+Gracz podaje tylko swój nick i kod pokoju. Wersja protokołu jest ustawiona wewnętrznie w kodzie klienta, a identyfikator PeerJS hosta jest automatycznie wyliczany. Parametry techniczne nie są wymagane i nie są pokazywane w formularzu.
 
-- `room` — sześci znakowy kod pokoju,
-- `peer` — identyfikator PeerJS hosta Android,
-- `protocol` — wersja protokołu odczytywana z linku i wysyłana do hosta.
-
-Przy braku lub błędzie parametrów aplikacja pokazuje dodatkowe pola techniczne. W prawidłowym zaproszeniu gracz widzi przede wszystkim nazwę pokoju i formularz profilu.
+Starszy parametr `peer` jest ignorowany. Starszy parametr `protocol` jest opcjonalny i służy wyłącznie do wykrycia niezgodnego linku.
 
 ## Kontrakt PeerJS
 
-Klient tworzy tymczasowy `Peer` bez własnego identyfikatora i otwiera `DataConnection` do hosta:
+Klient tworzy tymczasowy `Peer` bez własnego identyfikatora i otwiera `DataConnection` do hosta wyliczonego z kodu pokoju:
 
 ```ts
+const roomId = normalizeRoomId(rawRoomId);
+const hostPeerId = buildPeerJsHostId(roomId);
+
 peer.connect(hostPeerId, {
   label: 'panstwa-miasta-game-v1',
   reliable: true,
   serialization: 'json',
   metadata: {
     room: roomId,
-    protocol: protocolVersion,
+    protocol: SUPPORTED_GAME_PROTOCOL_VERSION,
   },
 });
 ```
+
+Dla pokoju `ABC123` techniczny identyfikator hosta ma postać `panstwa-miasta-room-v3-abc123`. Jest to szczegół developerski i nie jest wyświetlany graczowi.
 
 Po otwarciu połączenia wysyłany jest bezpośrednio obiekt `player:hello`. Nie ma dodatkowej koperty `event/payload`. `reconnectToken` znajduje się tylko w hello i pamięci lokalnej. Nie jest częścią publicznego obiektu gracza.
 

@@ -4,19 +4,24 @@ Dokument opisuje kontrakt używany przez klienta WWW. Źródłem prawdy pozostaj
 
 ## Transport
 
-Klient WWW tworzy połączenie PeerJS `DataConnection` do identyfikatora hosta przekazanego w linku zaproszenia.
+Klient WWW odczytuje z linku wyłącznie kod pokoju, normalizuje go i deterministycznie wylicza identyfikator hosta. Wersja protokołu pochodzi z centralnej stałej `SUPPORTED_GAME_PROTOCOL_VERSION`.
 
 ```ts
+const roomId = normalizeRoomId(rawRoomId);
+const hostPeerId = buildPeerJsHostId(roomId);
+
 peer.connect(hostPeerId, {
   label: 'panstwa-miasta-game-v1',
   reliable: true,
   serialization: 'json',
   metadata: {
     room: roomId,
-    protocol: protocolVersion,
+    protocol: SUPPORTED_GAME_PROTOCOL_VERSION,
   },
 });
 ```
+
+Format identyfikatora hosta to `panstwa-miasta-room-v{wersja}-{kod-małymi-literami}`. Dla pokoju `ABC123` i wersji 3 otrzymujemy `panstwa-miasta-room-v3-abc123`. Parametr `peer` ze starszych linków jest ignorowany. Parametr `protocol` jest opcjonalny i służy wyłącznie do wykrywania niezgodnych starych linków.
 
 Komunikaty są wysyłane jako bezpośrednie obiekty JSON. Nie stosuje się dodatkowej koperty `event/payload`.
 

@@ -4,6 +4,7 @@ import { isMessageWithinLimit } from '../protocol/messageSize';
 import type { ClientMessage, JsonValue } from '../protocol/messages';
 import { parseHostMessage } from '../protocol/parser';
 import type { JoinParameters } from '../features/connection/joinParams';
+import { buildPeerJsHostId } from './peerHostId';
 import { createPeerMetadata } from './peerMetadata';
 import type { GameTransport, TransportCallbacks } from './transport';
 
@@ -41,11 +42,11 @@ export class PeerJsGameTransport implements GameTransport {
 
       peer.on('open', () => {
         if (this.closedByUser) return fail(new Error('cancelled'));
-        const connection = peer.connect(parameters.hostPeerId, {
+        const connection = peer.connect(buildPeerJsHostId(parameters.roomId), {
           label: PEER_CONNECTION_LABEL,
           reliable: true,
           serialization: 'json',
-          metadata: createPeerMetadata(parameters.roomId, parameters.protocolVersion),
+          metadata: createPeerMetadata(parameters.roomId),
         });
         this.connection = connection;
         connection.on('open', () => finish(resolve));
@@ -105,13 +106,13 @@ export class PeerJsGameTransport implements GameTransport {
 export function mapPeerError(error: unknown): string {
   const type = typeof error === 'object' && error !== null && 'type' in error ? String(error.type) : '';
   switch (type) {
-    case 'peer-unavailable': return 'Telefon prowadzącego jest niedostępny albo identyfikator hosta wygasł.';
-    case 'invalid-id': return 'Identyfikator hosta PeerJS jest niepoprawny.';
-    case 'network': case 'socket-error': case 'socket-closed': return 'Nie udało się skontaktować z usługą sygnalizacyjną PeerJS.';
-    case 'webrtc': return 'Nie udało się utworzyć bezpośredniego połączenia z telefonem prowadzącego. Spróbuj innej sieci Wi‑Fi albo wyłącz VPN.';
-    case 'server-error': return 'Publiczna usługa PeerJS jest chwilowo niedostępna.';
+    case 'peer-unavailable': return 'Brak aktywnego pokoju o podanym kodzie. Sprawdź kod albo poproś prowadzącego o utworzenie pokoju.';
+    case 'invalid-id': return 'Kod pokoju jest nieprawidłowy.';
+    case 'network': case 'socket-error': case 'socket-closed': return 'Nie udało się połączyć z usługą gry. Sprawdź internet i spróbuj ponownie.';
+    case 'webrtc': return 'Nie udało się połączyć z telefonem prowadzącego. Spróbuj innej sieci Wi‑Fi albo wyłącz VPN.';
+    case 'server-error': return 'Usługa połączeń jest chwilowo niedostępna.';
     default: return error instanceof Error && error.message === 'timeout'
       ? 'Przekroczono czas zestawiania połączenia. Sprawdź, czy pokój nadal istnieje.'
-      : 'Nie udało się połączyć z prowadzącym. Sieć może blokować połączenia P2P.';
+      : 'Nie udało się połączyć z prowadzącym. Sprawdź internet i spróbuj ponownie.';
   }
 }
