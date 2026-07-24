@@ -24,7 +24,7 @@ Host Android pozostaje autorytatywny dla faz gry, czasu, odpowiedzi, ocen i punk
 ## Uruchomienie lokalne
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -135,7 +135,7 @@ Dla `https://USERNAME.github.io/REPOSITORY/`:
 VITE_BASE_PATH=/REPOSITORY/ npm run build
 ```
 
-W repozytorium można ustawić zmienną Actions `VITE_BASE_PATH`. Workflow używa `/` jako wartości domyślnej.
+Bez dodatkowej konfiguracji workflow automatycznie używa `/<nazwa-repozytorium>/`, dlatego projekt działa pod standardowym adresem GitHub Pages. Po ustawieniu własnej domeny należy dodać w **Settings → Secrets and variables → Actions → Variables** zmienną `VITE_BASE_PATH` o wartości `/`.
 
 ## Własna domena i Cloudflare
 
@@ -144,7 +144,7 @@ W repozytorium można ustawić zmienną Actions `VITE_BASE_PATH`. Workflow używ
 3. W Cloudflare dodaj rekord `CNAME` dla wybranej subdomeny wskazujący na `USERNAME.github.io`.
 4. W GitHub włącz **Enforce HTTPS**, gdy certyfikat będzie gotowy.
 5. W Cloudflare ustaw SSL/TLS na **Full** lub **Full (strict)**, gdy origin i konfiguracja domeny na to pozwalają.
-6. Skopiuj `public/CNAME.example` do `public/CNAME` i zastąp zawartość prawdziwą domeną dopiero wtedy, gdy domena jest ustalona.
+6. Plik `public/CNAME.example` jest wyłącznie wzorem na przyszłość; nie jest używany przy obecnej publikacji pod `github.io`.
 
 Cloudflare pełni tu wyłącznie rolę DNS/proxy/HTTPS. Nie przechowuje stanu gry i nie uruchamia logiki multiplayer.
 
