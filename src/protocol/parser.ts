@@ -73,5 +73,5 @@ function pickMetadata(value: Record<string, unknown>): { requestId?: string; sen
     ...(typeof value.sentAt === 'number' ? { sentAt: value.sentAt } : {}),
   };
 }
-function ok<T extends HostMessage>(message: T): HostMessageParseResult { return { ok: true, message }; }
+function ok(message: HostMessage): HostMessageParseResult { return { ok: true, message }; }
 function invalid(): HostMessageParseResult { return { ok: false, reason: 'Wiadomość hosta ma niepoprawną strukturę.' }; }

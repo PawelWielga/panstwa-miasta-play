@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { canAutoReconnect, reconnectDelay } from './reconnectPolicy';
 it('uses bounded exponential delays', () => {
   expect([0, 1, 2, 3, 10].map(reconnectDelay)).toEqual([500, 1000, 2000, 3000, 3500]);
