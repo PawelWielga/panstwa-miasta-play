@@ -1,0 +1,79 @@
+name: Bootstrap web client
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/peerjs-web-client
+    paths:
+      - bootstrap/**
+      - .github/workflows/unpack-project.yml
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/peerjs-web-client
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+        continue-on-error: true
+
+      - name: Unpack project sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat bootstrap/chunk* > /tmp/project.tar.gz.b64
+          base64 --decode /tmp/project.tar.gz.b64 > /tmp/project.tar.gz
+          tar -xzf /tmp/project.tar.gz
+          rm -rf bootstrap project.tar.gz.b64
+          rm -f .github/workflows/pages.yml .github/workflows/bootstrap-lock.yml
+
+      - name: Commit project sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: implement PeerJS web client"
+          git push
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Commit dependency lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add package-lock.json package.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "build: lock npm dependencies"
+          git push
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
