@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import type { AppActions } from '../app/AppContext';
 import type { AppState } from '../state/gameStore';
 import type { PlayerIdentity } from '../storage/playerIdentityStorage';
 
@@ -16,9 +17,9 @@ export function appState(overrides: Partial<AppState> = {}): AppState {
     ...overrides,
   };
 }
-export function appActions() {
+export function appActions(): AppActions {
   return {
-    updateIdentity: vi.fn((values) => ({ ...identity, ...values })), connect: vi.fn(async () => undefined), cancel: vi.fn(), retry: vi.fn(), toggleReady: vi.fn(),
+    updateIdentity: vi.fn((values: Pick<PlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>) => ({ ...identity, ...values })), connect: vi.fn(() => Promise.resolve()), cancel: vi.fn(), retry: vi.fn(), toggleReady: vi.fn(),
     setAnswer: vi.fn(), submitAnswers: vi.fn(), editAnswers: vi.fn(), clearNotice: vi.fn(),
   };
 }

@@ -10,6 +10,8 @@ describe('player identity storage', () => {
     const storage = { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => data.set(key, value) };
     savePlayerIdentity(identity, storage);
     expect(loadPlayerIdentity(storage)).toEqual(identity);
-    expect(JSON.parse(data.get(playerIdentityStorageKey)!)).not.toHaveProperty('profile');
+    const storedValue = data.get(playerIdentityStorageKey);
+    expect(storedValue).toBeDefined();
+    expect(JSON.parse(storedValue ?? '{}')).not.toHaveProperty('profile');
   });
 });
