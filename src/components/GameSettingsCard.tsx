@@ -1,7 +1,7 @@
 import type { CountriesCitiesSettings, GameCategory } from '../protocol/messages';
 import { Card } from './Layout';
 
-export function GameSettingsCard({ categories, settings, timeMode }: { categories: GameCategory[]; settings: CountriesCitiesSettings | null; timeMode?: string }) {
+export function GameSettingsCard({ categories, settings, timeMode }: { categories: GameCategory[]; settings: CountriesCitiesSettings | null; timeMode: string | undefined }) {
   return <Card className="settings-card"><h2>Ustawienia gry</h2>
     <dl className="settings-grid">
       <div><dt>Rundy</dt><dd>{settings?.roundCount ?? '—'}</dd></div>

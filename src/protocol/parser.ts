@@ -64,6 +64,7 @@ export function parseHostMessage(data: unknown): HostMessageParseResult {
       return finalResults && roundScores && finalScores ? ok({ type: data.type, finalResults, roundScores, finalScores, ...metadata }) : invalid();
     }
   }
+  return invalid();
 }
 
 function pickMetadata(value: Record<string, unknown>): { requestId?: string; senderId?: string; sentAt?: number } {
