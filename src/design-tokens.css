@@ -1,0 +1,44 @@
+/*
+ * Państwa Miasta design tokens, snapshot v0.2.0.
+ * Source commit: e28d643a2cc10eb2e47f55f82e8252485674ec2f
+ */
+:root {
+  --pm-color-primary: #1565c0;
+  --pm-color-accent: #ffc107;
+  --pm-color-background: #f8fafc;
+  --pm-color-surface: #ffffff;
+  --pm-color-text-primary: #0f172a;
+  --pm-color-text-secondary: #64748b;
+  --pm-color-border: #cbd5e1;
+  --pm-color-success: #2e7d32;
+  --pm-color-warning: #fb8c00;
+  --pm-color-error: #d32f2f;
+  --pm-color-ranking-silver: #94a3b8;
+  --pm-color-ranking-bronze: #cd7f32;
+
+  --pm-font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --pm-font-weight-regular: 400;
+  --pm-font-weight-semibold: 600;
+  --pm-font-weight-bold: 700;
+
+  --pm-space-xs: 4px;
+  --pm-space-sm: 8px;
+  --pm-space-md: 12px;
+  --pm-space-lg: 16px;
+  --pm-space-xl: 20px;
+  --pm-space-2xl: 24px;
+  --pm-space-3xl: 28px;
+  --pm-space-4xl: 32px;
+  --pm-space-5xl: 40px;
+  --pm-space-6xl: 48px;
+
+  --pm-radius-small: 8px;
+  --pm-radius-input: 14px;
+  --pm-radius-standard: 16px;
+  --pm-radius-pill: 24px;
+  --pm-touch-target-min: 48px;
+  --pm-button-height-standard: 54px;
+  --pm-button-height-large: 58px;
+  --pm-content-max-width: 420px;
+  --pm-screen-padding: 24px;
+}
