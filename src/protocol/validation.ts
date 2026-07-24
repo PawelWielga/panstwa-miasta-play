@@ -183,6 +183,11 @@ function parseNestedStringMap(value: unknown): Record<string, Record<string, str
   return result;
 }
 
+function parseStringList(value: unknown): string[] | null {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) return null;
+  return [...value] as string[];
+}
+
 function parseReviewReady(value: unknown): Record<string, string[]> | null {
   if (!isRecord(value)) return null;
   const result: Record<string, string[]> = {};
@@ -208,13 +213,16 @@ export function parseSnapshot(value: unknown): GameSnapshot | null {
   const finalResults = parseAnswerResults(value.finalResults ?? {});
   const roundScores = parseNumberMap(value.roundScores ?? {});
   const finalScores = parseNumberMap(value.finalScores ?? {});
-  const stringLists = [value.usedLetters, value.letterHistory, value.donePlayerIds, value.speedBonusPlayerIds];
-  if (!phase || players.some((item) => item === null) || !categories || !settings || (value.round !== null && !round) || !submissions || !submittedAtByPlayerId || !votes || !hostVoteSuggestions || !reviewReady || !finalResults || !roundScores || !finalScores || stringLists.some((list) => !Array.isArray(list) || !list.every((item) => typeof item === 'string'))) return null;
+  const usedLetters = parseStringList(value.usedLetters);
+  const letterHistory = parseStringList(value.letterHistory);
+  const donePlayerIds = parseStringList(value.donePlayerIds);
+  const speedBonusPlayerIds = parseStringList(value.speedBonusPlayerIds);
+  if (!phase || players.some((item) => item === null) || !categories || !settings || (value.round !== null && !round) || !submissions || !submittedAtByPlayerId || !votes || !hostVoteSuggestions || !reviewReady || !finalResults || !roundScores || !finalScores || !usedLetters || !letterHistory || !donePlayerIds || !speedBonusPlayerIds) return null;
   return {
     gameId: value.gameId, roomId: value.roomId, sequenceNumber: value.sequenceNumber, hostPlayerId: value.hostPlayerId, phase,
-    players: players as ReplicatedPlayerState[], categories, usedLetters: [...value.usedLetters] as string[], letterHistory: [...value.letterHistory] as string[], round,
+    players: players as ReplicatedPlayerState[], categories, usedLetters, letterHistory, round,
     endMode: value.endMode, timeMode: value.timeMode, settings, hostControlsReview: value.hostControlsReview, submissions, submittedAtByPlayerId,
-    donePlayerIds: [...value.donePlayerIds] as string[], votes, hostVoteSuggestions, reviewReady, finalResults, roundScores, finalScores,
-    speedBonusPlayerIds: [...value.speedBonusPlayerIds] as string[],
+    donePlayerIds, votes, hostVoteSuggestions, reviewReady, finalResults, roundScores, finalScores,
+    speedBonusPlayerIds,
   };
 }
