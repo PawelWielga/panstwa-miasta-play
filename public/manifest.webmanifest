@@ -1,0 +1,10 @@
+{
+  "name": "Państwa Miasta",
+  "short_name": "Państwa Miasta",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f7f5ff",
+  "theme_color": "#6d4aff",
+  "lang": "pl",
+  "icons": []
+}
