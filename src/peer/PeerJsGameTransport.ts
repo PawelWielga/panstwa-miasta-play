@@ -37,7 +37,7 @@ export class PeerJsGameTransport implements GameTransport {
         window.clearTimeout(timer);
         action();
       };
-      const fail = (error: unknown): void => finish(() => reject(error));
+      const fail = (error: unknown): void => finish(() => reject(error instanceof Error ? error : new Error(String(error))));
 
       peer.on('open', () => {
         if (this.closedByUser) return fail(new Error('cancelled'));
@@ -72,7 +72,7 @@ export class PeerJsGameTransport implements GameTransport {
     const connection = this.connection;
     if (!connection?.open) throw new Error('Połączenie z hostem nie jest otwarte.');
     if (!isMessageWithinLimit(message as unknown as JsonValue)) throw new Error('Wiadomość przekracza limit 64 KiB.');
-    connection.send(message);
+    void connection.send(message);
   }
 
   close(): void {

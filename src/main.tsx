@@ -4,4 +4,6 @@ import { App } from './app/App';
 import { AppProvider } from './app/AppContext';
 import './styles.css';
 
-createRoot(document.getElementById('root')!).render(<StrictMode><AppProvider><App /></AppProvider></StrictMode>);
+const rootElement = document.getElementById('root');
+if (rootElement === null) throw new Error('Brak elementu #root.');
+createRoot(rootElement).render(<StrictMode><AppProvider><App /></AppProvider></StrictMode>);
