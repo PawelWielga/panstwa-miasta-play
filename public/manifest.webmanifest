@@ -3,8 +3,15 @@
   "short_name": "Państwa Miasta",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#f7f5ff",
-  "theme_color": "#6d4aff",
+  "background_color": "#f8fafc",
+  "theme_color": "#1565c0",
   "lang": "pl",
-  "icons": []
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }

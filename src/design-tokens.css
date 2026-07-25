@@ -36,6 +36,10 @@
   --pm-radius-input: 14px;
   --pm-radius-standard: 16px;
   --pm-radius-pill: 24px;
+
+  --pm-border-standard: 1px;
+  --pm-border-focus: 2px;
+
   --pm-touch-target-min: 48px;
   --pm-button-height-standard: 54px;
   --pm-button-height-large: 58px;
