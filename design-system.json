@@ -3,5 +3,15 @@
   "version": "0.2.0",
   "commit": "e28d643a2cc10eb2e47f55f82e8252485674ec2f",
   "source": "dist/tokens.css",
-  "localCopy": "src/design-tokens.css"
+  "localCopy": "src/design-tokens.css",
+  "assets": {
+    "logoMark": {
+      "source": "assets/branding/logo-mark.svg",
+      "localCopy": "public/logo-mark.svg"
+    },
+    "favicon": {
+      "source": "assets/branding/favicon.svg",
+      "localCopy": "public/favicon.svg"
+    }
+  }
 }
