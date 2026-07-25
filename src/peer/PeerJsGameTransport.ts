@@ -10,7 +10,7 @@ import { createPeerMetadata } from './peerMetadata';
 import type { GameTransport, TransportCallbacks } from './transport';
 
 interface PeerRtcConfiguration extends RTCConfiguration { sdpSemantics?: 'unified-plan' }
-type DataConnectionWithPeerConnection = DataConnection & { peerConnection?: RTCPeerConnection };
+type DataConnectionWithPeerConnection = { peerConnection?: RTCPeerConnection };
 
 export class PeerJsGameTransport implements GameTransport {
   private peer: Peer | null = null;
@@ -145,7 +145,7 @@ export class PeerJsGameTransport implements GameTransport {
   }
 
   private attachPeerConnectionDiagnostics(connection: DataConnection): void {
-    const peerConnection = (connection as DataConnectionWithPeerConnection).peerConnection;
+    const peerConnection = (connection as unknown as DataConnectionWithPeerConnection).peerConnection;
     if (!peerConnection) {
       recordConnectionDiagnostic('webrtc.peer-connection.unavailable', 'warning');
       return;

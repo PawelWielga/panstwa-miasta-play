@@ -46,7 +46,7 @@ describe('connectionDiagnostics', () => {
 
   it('keeps only the latest 80 entries', () => {
     for (let index = 0; index < 85; index += 1) {
-      recordConnectionDiagnostic(`event.${index}`);
+      recordConnectionDiagnostic(`event.${String(index)}`);
     }
 
     expect(getConnectionDiagnostics()).toHaveLength(80);

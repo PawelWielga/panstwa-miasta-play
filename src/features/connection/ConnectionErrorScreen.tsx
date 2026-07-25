@@ -49,19 +49,7 @@ export function ConnectionErrorScreen() {
 }
 
 async function copyText(text: string): Promise<void> {
-  if (navigator.clipboard) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-
-  const textArea = document.createElement('textarea');
-  textArea.value = text;
-  textArea.setAttribute('readonly', '');
-  textArea.style.position = 'fixed';
-  textArea.style.opacity = '0';
-  document.body.append(textArea);
-  textArea.select();
-  const copied = document.execCommand('copy');
-  textArea.remove();
-  if (!copied) throw new Error('copy-failed');
+  const clipboard = (navigator as unknown as { clipboard?: Clipboard }).clipboard;
+  if (!clipboard) throw new Error('clipboard-unavailable');
+  await clipboard.writeText(text);
 }

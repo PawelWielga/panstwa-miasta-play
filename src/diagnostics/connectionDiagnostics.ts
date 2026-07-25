@@ -60,7 +60,7 @@ export function getConnectionRuntimeDetails(roomId?: string): ConnectionDiagnost
   return {
     roomId: roomId ?? null,
     online: typeof navigator === 'undefined' ? null : navigator.onLine,
-    secureContext: typeof window === 'undefined' ? null : window.isSecureContext ?? null,
+    secureContext: typeof window === 'undefined' ? null : window.isSecureContext,
     visibility: typeof document === 'undefined' ? null : document.visibilityState,
     origin: typeof window === 'undefined' ? null : window.location.origin,
     path: typeof window === 'undefined' ? null : window.location.pathname,
@@ -155,7 +155,7 @@ function isDiagnosticValue(value: unknown): value is ConnectionDiagnosticValue {
 }
 
 function toDiagnosticValue(value: unknown): ConnectionDiagnosticValue {
-  return isDiagnosticValue(value) ? value : String(value);
+  return isDiagnosticValue(value) ? value : typeof value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
