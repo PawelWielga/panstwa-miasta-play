@@ -435,6 +435,52 @@ legend {
   background: var(--success);
 }
 
+.connection-diagnostics {
+  width: 100%;
+  margin-top: var(--pm-space-lg);
+  padding: var(--pm-space-lg);
+  background: var(--surface-muted);
+  border: var(--pm-border-standard) solid var(--line);
+  border-radius: var(--pm-radius-standard);
+  text-align: left;
+}
+
+.connection-diagnostics summary {
+  min-height: var(--pm-touch-target-min);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--primary);
+  font-weight: var(--pm-font-weight-semibold);
+}
+
+.connection-diagnostics p {
+  margin: var(--pm-space-sm) 0 var(--pm-space-md);
+  color: var(--muted);
+  font-size: .875rem;
+}
+
+.connection-diagnostics pre {
+  max-height: 260px;
+  margin: 0 0 var(--pm-space-md);
+  padding: var(--pm-space-md);
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  background: var(--surface);
+  border: var(--pm-border-standard) solid var(--line);
+  border-radius: var(--pm-radius-standard);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .75rem;
+  line-height: 1.45;
+}
+
+.connection-diagnostics .button {
+  width: 100%;
+  min-width: 0;
+}
+
 .connection-banner {
   display: flex;
   gap: var(--pm-space-md);
@@ -803,7 +849,9 @@ legend {
     width: 100%;
   }
 
-  .connection-banner {
+  
+
+.connection-banner {
     align-items: flex-start;
   }
 

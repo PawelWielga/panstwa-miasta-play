@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SUPPORTED_GAME_PROTOCOL_VERSION } from '../protocol/constants';
+import { clearConnectionDiagnostics } from '../diagnostics/connectionDiagnostics';
 import type { TransportCallbacks } from './transport';
 
 const peerMock = vi.hoisted(() => ({ connect: vi.fn() }));
@@ -18,8 +19,8 @@ vi.mock('peerjs', () => {
   return {
     default: class MockPeer {
       destroyed = false;
-      on(event: string, callback: () => void): this {
-        if (event === 'open') queueMicrotask(callback);
+      on(event: string, callback: (value?: unknown) => void): this {
+        if (event === 'open') queueMicrotask(() => callback('client-peer'));
         return this;
       }
       connect(peerId: string, options: unknown): MockConnection {
@@ -35,7 +36,15 @@ vi.mock('peerjs', () => {
 import { PeerJsGameTransport } from './PeerJsGameTransport';
 
 describe('PeerJsGameTransport', () => {
-  beforeEach(() => peerMock.connect.mockClear());
+  beforeEach(() => {
+    clearConnectionDiagnostics();
+    peerMock.connect.mockClear();
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
 
   it('connects to the host derived only from the room code', async () => {
     const callbacks: TransportCallbacks = {
