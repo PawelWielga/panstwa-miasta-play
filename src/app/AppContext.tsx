@@ -80,8 +80,8 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         onError: (message) => dispatch({ type: 'connection', status: 'error', error: message }),
       });
       const currentState = stateRef.current;
-      transport.send(createPlayerHello({ profile: currentState.identity.profile, reconnectToken: currentState.identity.reconnectToken }, parameters.protocolVersion));
-      if (reconnecting || current.everConnected) transport.send(createRejoin(currentState.identity.profile, currentState.lastSeenSequenceNumber, parameters.protocolVersion));
+      transport.send(createPlayerHello({ profile: currentState.identity.profile, reconnectToken: currentState.identity.reconnectToken }));
+      if (reconnecting || current.everConnected) transport.send(createRejoin(currentState.identity.profile, currentState.lastSeenSequenceNumber));
       current.everConnected = true;
       current.startedAt = 0;
       current.attempt = 0;

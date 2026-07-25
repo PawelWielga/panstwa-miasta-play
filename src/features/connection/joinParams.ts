@@ -1,21 +1,57 @@
-import { ROOM_CODE_PATTERN } from '../../protocol/constants';
+import { ROOM_CODE_PATTERN, SUPPORTED_GAME_PROTOCOL_VERSION } from '../../protocol/constants';
 
-export interface JoinParameters { roomId: string; hostPeerId: string; protocolVersion: number }
-export interface JoinParameterResult { value: JoinParameters | null; errors: Partial<Record<'room' | 'peer' | 'protocol', string>>; fromInvitation: boolean }
+export interface JoinParameters { roomId: string }
+export type JoinParameterErrorKey = 'room' | 'protocol';
+export interface JoinParameterResult {
+  value: JoinParameters | null;
+  errors: Partial<Record<JoinParameterErrorKey, string>>;
+  fromInvitation: boolean;
+}
+
+export const INCOMPATIBLE_GAME_VERSION_MESSAGE =
+  'Ta wersja gry jest niezgodna. Odśwież stronę lub poproś prowadzącego o nowy link.';
+
+export function normalizeRoomId(rawRoomId: string): string {
+  const roomId = rawRoomId.trim().toUpperCase();
+  if (!roomId) throw new Error('Kod pokoju nie może być pusty.');
+  if (!ROOM_CODE_PATTERN.test(roomId)) {
+    throw new Error('Kod pokoju musi mieć dokładnie 6 liter lub cyfr.');
+  }
+  return roomId;
+}
 
 export function parseJoinParameters(search: string): JoinParameterResult {
   const params = new URLSearchParams(search);
-  const raw = { room: params.get('room')?.trim() ?? '', peer: params.get('peer')?.trim() ?? '', protocol: params.get('protocol')?.trim() ?? '' };
-  const fromInvitation = Boolean(raw.room || raw.peer || raw.protocol);
+  const rawRoomId = params.get('room') ?? '';
+  const rawProtocol = params.get('protocol')?.trim() ?? '';
   const errors: JoinParameterResult['errors'] = {};
-  const roomId = raw.room.toUpperCase();
-  if (!ROOM_CODE_PATTERN.test(roomId)) errors.room = 'Kod pokoju musi mieć 6 znaków bez 0, 1, I i O.';
-  if (!raw.peer || raw.peer.length > 255 || /\s/.test(raw.peer)) errors.peer = 'Podaj poprawny identyfikator hosta PeerJS.';
-  const protocolVersion = Number(raw.protocol);
-  if (!raw.protocol || !Number.isInteger(protocolVersion) || protocolVersion <= 0) errors.protocol = 'Wersja protokołu musi być dodatnią liczbą całkowitą.';
-  return { value: Object.keys(errors).length === 0 ? { roomId, hostPeerId: raw.peer, protocolVersion } : null, errors, fromInvitation };
+  let roomId = '';
+
+  try {
+    roomId = normalizeRoomId(rawRoomId);
+  } catch (error) {
+    errors.room = error instanceof Error ? error.message : 'Kod pokoju jest nieprawidłowy.';
+  }
+
+  if (rawProtocol) {
+    const protocolVersion = Number(rawProtocol);
+    if (!Number.isInteger(protocolVersion) || protocolVersion !== SUPPORTED_GAME_PROTOCOL_VERSION) {
+      errors.protocol = INCOMPATIBLE_GAME_VERSION_MESSAGE;
+    }
+  }
+
+  return {
+    value: Object.keys(errors).length === 0 ? { roomId } : null,
+    errors,
+    fromInvitation: rawRoomId.trim().length > 0,
+  };
 }
 
 export function validateJoinParameters(value: JoinParameters): JoinParameterResult['errors'] {
-  return parseJoinParameters(`?room=${encodeURIComponent(value.roomId)}&peer=${encodeURIComponent(value.hostPeerId)}&protocol=${String(value.protocolVersion)}`).errors;
+  try {
+    normalizeRoomId(value.roomId);
+    return {};
+  } catch (error) {
+    return { room: error instanceof Error ? error.message : 'Kod pokoju jest nieprawidłowy.' };
+  }
 }
