@@ -7,8 +7,15 @@ export interface TransportCallbacks {
   onMessage: (message: HostMessage) => void;
   onError: (message: string) => void;
 }
+export interface TransportConnectContext {
+  connectionAttemptId: string;
+}
 export interface GameTransport {
-  connect(parameters: JoinParameters, callbacks: TransportCallbacks): Promise<void>;
+  connect(
+    parameters: JoinParameters,
+    callbacks: TransportCallbacks,
+    context?: TransportConnectContext,
+  ): Promise<void>;
   send(message: ClientMessage): void;
   close(): void;
 }
