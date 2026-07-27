@@ -192,7 +192,7 @@ describe('PeerJsGameTransport', () => {
     );
 
     openPeer();
-    const connection = openConnection();
+    openConnection();
     await Promise.resolve();
 
     expect(transportCallbacks.onState).toHaveBeenCalledWith('connecting');
@@ -247,16 +247,16 @@ describe('PeerJsGameTransport', () => {
     await expect(connectPromise).rejects.toMatchObject({ reason: 'build-number-too-low' });
     expect(transportCallbacks.onState).not.toHaveBeenCalledWith('open');
     expect(transportCallbacks.onMessage).not.toHaveBeenCalled();
-    expect(getConnectionDiagnostics()).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        event: 'peerjs.bridge-ready.rejected',
-        details: expect.objectContaining({
-          detectedBuildNumber: MIN_SUPPORTED_HOST_BUILD_NUMBER - 1,
-          minimumBuildNumber: MIN_SUPPORTED_HOST_BUILD_NUMBER,
-          reason: 'build-number-too-low',
-        }),
-      }),
-    ]));
+    const rejectionDiagnostic = getConnectionDiagnostics().find(
+      (entry) => entry.event === 'peerjs.bridge-ready.rejected',
+    );
+    expect(rejectionDiagnostic?.details.detectedBuildNumber).toBe(
+      MIN_SUPPORTED_HOST_BUILD_NUMBER - 1,
+    );
+    expect(rejectionDiagnostic?.details.minimumBuildNumber).toBe(
+      MIN_SUPPORTED_HOST_BUILD_NUMBER,
+    );
+    expect(rejectionDiagnostic?.details.reason).toBe('build-number-too-low');
   });
 
   it('rejects a host with an incompatible protocol version', async () => {
