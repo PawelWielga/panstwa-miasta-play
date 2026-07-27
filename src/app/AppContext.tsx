@@ -192,7 +192,6 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       && !reconnectRef.current.manuallyClosed;
 
     let handshakeSent = false;
-    let handshakeError: Error | null = null;
     const sendInitialHandshake = (): void => {
       if (handshakeSent || !isCurrentAttempt()) return;
       try {
@@ -217,12 +216,13 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         }
         handshakeSent = true;
       } catch (error) {
-        handshakeError = error instanceof Error ? error : new Error(String(error));
+        const normalizedError = error instanceof Error ? error : new Error(String(error));
         recordConnectionDiagnostic('client-handshake.send.failed', 'error', {
           connectionAttemptId,
-          ...getDiagnosticErrorDetails(handshakeError),
+          ...getDiagnosticErrorDetails(normalizedError),
         });
         transport.close();
+        throw normalizedError;
       }
     };
 
@@ -267,10 +267,6 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
             reason: 'stale-attempt',
           });
           return;
-        }
-        if (handshakeError !== null) throw handshakeError;
-        if (!handshakeSent) {
-          throw new Error('Transport zakończył łączenie bez wysłania player:hello.');
         }
 
         current.everConnected = true;
