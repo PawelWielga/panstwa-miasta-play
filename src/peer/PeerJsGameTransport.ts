@@ -5,6 +5,7 @@ import { isMessageWithinLimit } from '../protocol/messageSize';
 import type { ClientMessage, JsonValue } from '../protocol/messages';
 import { parseHostMessage } from '../protocol/parser';
 import type { JoinParameters } from '../features/connection/joinParams';
+import { isPeerJsBridgeReadyMessage } from './bridgeProtocol';
 import { buildPeerJsHostId } from './peerHostId';
 import { createPeerMetadata } from './peerMetadata';
 import type { GameTransport, TransportCallbacks, TransportConnectContext } from './transport';
@@ -170,10 +171,27 @@ export class PeerJsGameTransport implements GameTransport {
               remotePeerId: details.peer ?? hostPeerId,
               connectionId: details.connectionId ?? null,
             });
-            finish(resolve);
+            recordConnectionDiagnostic('data-connection.awaiting-bridge-ready', 'info', {
+              connectionAttemptId,
+            });
           });
           connection.on('data', (data) => {
-            if (this.isCurrent(generation, peer, connection)) this.handleData(data);
+            if (!this.isCurrent(generation, peer, connection)) return;
+            if (isPeerJsBridgeReadyMessage(data)) {
+              recordConnectionDiagnostic('peerjs.bridge-ready.received', 'info', {
+                connectionAttemptId,
+              });
+              if (!settled) finish(resolve);
+              return;
+            }
+            if (!settled) {
+              recordConnectionDiagnostic('host-message.ignored', 'warning', {
+                connectionAttemptId,
+                reason: 'bridge-not-ready',
+              });
+              return;
+            }
+            this.handleData(data);
           });
           connection.on('close', () => {
             if (!this.isCurrent(generation, peer, connection)) return;

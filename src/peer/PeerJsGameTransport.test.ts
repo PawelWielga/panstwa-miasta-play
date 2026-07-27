@@ -101,6 +101,13 @@ function openConnection(peerIndex = 0, connectionIndex = 0) {
   return connection;
 }
 
+function markBridgeReady(peerIndex = 0, connectionIndex = 0) {
+  const connection = getPeer(peerIndex).connections[connectionIndex];
+  if (!connection) throw new Error(`Missing connection at index ${String(connectionIndex)}.`);
+  connection.emit('data', { type: 'bridge:ready' });
+  return connection;
+}
+
 describe('PeerJsGameTransport', () => {
   beforeEach(() => {
     clearConnectionDiagnostics();
@@ -125,6 +132,7 @@ describe('PeerJsGameTransport', () => {
 
     const peer = openPeer();
     openConnection();
+    markBridgeReady();
     await connectPromise;
 
     expect(peer.connect).toHaveBeenCalledWith('panstwa-miasta-room-v3-abc123', {
@@ -140,6 +148,32 @@ describe('PeerJsGameTransport', () => {
     expect(openDiagnostic?.details.connectionAttemptId).toBe('attempt-1');
   });
 
+  it('waits for the host bridge readiness signal before exposing open state', async () => {
+    const transport = new PeerJsGameTransport();
+    const transportCallbacks = callbacks();
+    const connectPromise = transport.connect(
+      { roomId: 'ABC123' },
+      transportCallbacks,
+      { connectionAttemptId: 'attempt-ready' },
+    );
+
+    openPeer();
+    const connection = openConnection();
+    await Promise.resolve();
+
+    expect(transportCallbacks.onState).toHaveBeenCalledWith('connecting');
+    expect(transportCallbacks.onState).not.toHaveBeenCalledWith('open');
+
+    connection.emit('data', { type: 'bridge:ready' });
+    await connectPromise;
+
+    expect(transportCallbacks.onState).toHaveBeenCalledWith('open');
+    expect(transportCallbacks.onMessage).not.toHaveBeenCalled();
+    expect(
+      getConnectionDiagnostics().some((entry) => entry.event === 'peerjs.bridge-ready.received'),
+    ).toBe(true);
+  });
+
   it('deduplicates parallel connect calls on the same transport', async () => {
     const transport = new PeerJsGameTransport();
     const first = transport.connect({ roomId: 'ABC123' }, callbacks());
@@ -150,6 +184,7 @@ describe('PeerJsGameTransport', () => {
 
     const peer = openPeer();
     openConnection();
+    markBridgeReady();
     await Promise.all([first, second]);
 
     expect(peer.connect).toHaveBeenCalledTimes(1);
@@ -183,6 +218,7 @@ describe('PeerJsGameTransport', () => {
 
     secondPeer.emit('open', 'current-client-peer');
     openConnection(1);
+    markBridgeReady(1);
     await second;
 
     expect(secondPeer.connect).toHaveBeenCalledTimes(1);
@@ -195,6 +231,7 @@ describe('PeerJsGameTransport', () => {
 
     peer.emit('open', 'client-peer-again');
     openConnection();
+    markBridgeReady();
     await connectPromise;
 
     expect(peer.connect).toHaveBeenCalledTimes(1);
