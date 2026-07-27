@@ -48,6 +48,11 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
   const stateRef = useRef(state);
   const transportRef = useRef<GameTransport | null>(null);
   const reconnectRef = useRef({ startedAt: 0, attempt: 0, timer: 0, manuallyClosed: false, everConnected: false });
+  const connectionAttemptRef = useRef({
+    sequence: 0,
+    currentId: null as string | null,
+    inFlight: null as Promise<void> | null,
+  });
   const factoryRef = useRef(transportFactory);
   const connectInternalRef = useRef<(parameters: JoinParameters, reconnecting: boolean) => Promise<void>>(() => Promise.resolve());
   useEffect(() => { stateRef.current = state; }, [state]);
@@ -84,8 +89,23 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     const parameters = stateRef.current.joinParameters;
     if (current.manuallyClosed || parameters === null) {
       recordConnectionDiagnostic('reconnect.skipped', 'info', {
+        reason: current.manuallyClosed ? 'manually-closed' : 'join-parameters-unavailable',
         manuallyClosed: current.manuallyClosed,
         hasJoinParameters: parameters !== null,
+      });
+      return;
+    }
+    if (connectionAttemptRef.current.inFlight !== null) {
+      recordConnectionDiagnostic('reconnect.skipped', 'info', {
+        reason: 'connection-attempt-in-flight',
+        connectionAttemptId: connectionAttemptRef.current.currentId,
+      });
+      return;
+    }
+    if (current.timer !== 0) {
+      recordConnectionDiagnostic('reconnect.skipped', 'info', {
+        reason: 'retry-already-scheduled',
+        connectionAttemptId: connectionAttemptRef.current.currentId,
       });
       return;
     }
@@ -102,7 +122,6 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       dispatch({ type: 'connection', status: 'lost', error: 'Automatyczne ponowne łączenie nie powiodło się.' });
       return;
     }
-    window.clearTimeout(current.timer);
     const delayMs = reconnectDelay(current.attempt);
     recordConnectionDiagnostic('reconnect.scheduled', 'warning', {
       nextAttempt: current.attempt + 1,
@@ -113,83 +132,196 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     });
     dispatch({ type: 'connection', status: 'reconnecting' });
     current.timer = window.setTimeout(() => {
+      current.timer = 0;
+      if (current.manuallyClosed || connectionAttemptRef.current.inFlight !== null) {
+        recordConnectionDiagnostic('reconnect.timer.cancelled', 'info', {
+          reason: current.manuallyClosed ? 'manually-closed' : 'connection-attempt-in-flight',
+        });
+        return;
+      }
       current.attempt += 1;
       recordConnectionDiagnostic('reconnect.attempt.started', 'warning', { attempt: current.attempt });
       void connectInternalRef.current(parameters, true);
     }, delayMs);
   }, []);
 
-  const onTransportState = useCallback((transportState: TransportState): void => {
+  const onTransportState = useCallback((transportState: TransportState, connectionAttemptId: string): void => {
     recordConnectionDiagnostic('transport.state.changed', transportState === 'error' || transportState === 'closed' ? 'warning' : 'info', {
+      connectionAttemptId,
       transportState,
       manuallyClosed: reconnectRef.current.manuallyClosed,
     });
     if ((transportState === 'closed' || transportState === 'error') && !reconnectRef.current.manuallyClosed) scheduleReconnect();
   }, [scheduleReconnect]);
 
-  const connectInternal = useCallback(async (parameters: JoinParameters, reconnecting: boolean): Promise<void> => {
+  const connectInternal = useCallback((parameters: JoinParameters, reconnecting: boolean): Promise<void> => {
+    const existingAttempt = connectionAttemptRef.current.inFlight;
+    if (existingAttempt !== null) {
+      recordConnectionDiagnostic('connection.attempt.deduplicated', 'warning', {
+        connectionAttemptId: connectionAttemptRef.current.currentId,
+        reconnecting,
+      });
+      return existingAttempt;
+    }
+
     const current = reconnectRef.current;
     current.manuallyClosed = false;
+    window.clearTimeout(current.timer);
+    current.timer = 0;
+    connectionAttemptRef.current.sequence += 1;
+    const connectionAttemptId = createConnectionAttemptId(connectionAttemptRef.current.sequence);
+    connectionAttemptRef.current.currentId = connectionAttemptId;
     recordConnectionDiagnostic('connection.attempt.started', reconnecting ? 'warning' : 'info', {
+      connectionAttemptId,
       reconnecting,
       attempt: current.attempt,
       ...getConnectionRuntimeDetails(parameters.roomId),
     });
+    stateRef.current = { ...stateRef.current, joinParameters: parameters };
     dispatch({ type: 'join-parameters', parameters });
     dispatch({ type: 'connection', status: reconnecting ? 'reconnecting' : 'connecting' });
-    transportRef.current?.close();
+
+    const previousTransport = transportRef.current;
+    transportRef.current = null;
+    previousTransport?.close();
     const transport = factoryRef.current();
     transportRef.current = transport;
-    try {
-      await transport.connect(parameters, {
-        onState: onTransportState,
-        onMessage: handleMessage,
-        onError: (message) => {
-          recordConnectionDiagnostic('transport.user-error', 'error', { userMessage: message });
-          dispatch({ type: 'connection', status: 'error', error: message });
-        },
-      });
-      const currentState = stateRef.current;
-      transport.send(createPlayerHello({ profile: currentState.identity.profile, reconnectToken: currentState.identity.reconnectToken }));
-      recordConnectionDiagnostic('client-message.send', 'info', { messageType: 'player:hello' });
-      if (reconnecting || current.everConnected) {
-        transport.send(createRejoin(currentState.identity.profile, currentState.lastSeenSequenceNumber));
+    const isCurrentAttempt = (): boolean =>
+      connectionAttemptRef.current.currentId === connectionAttemptId
+      && transportRef.current === transport
+      && !reconnectRef.current.manuallyClosed;
+
+    let shouldReconnect = false;
+    const attemptPromise = (async (): Promise<void> => {
+      try {
+        await transport.connect(parameters, {
+          onState: (transportState) => {
+            if (!isCurrentAttempt()) {
+              recordConnectionDiagnostic('transport.state.ignored', 'info', {
+                connectionAttemptId,
+                transportState,
+                reason: 'stale-attempt',
+              });
+              return;
+            }
+            onTransportState(transportState, connectionAttemptId);
+          },
+          onMessage: (message) => {
+            if (isCurrentAttempt()) handleMessage(message);
+            else recordConnectionDiagnostic('host-message.ignored', 'info', {
+              connectionAttemptId,
+              reason: 'stale-attempt',
+            });
+          },
+          onError: (message) => {
+            if (!isCurrentAttempt()) {
+              recordConnectionDiagnostic('transport.user-error.ignored', 'info', {
+                connectionAttemptId,
+                reason: 'stale-attempt',
+              });
+              return;
+            }
+            recordConnectionDiagnostic('transport.user-error', 'error', { connectionAttemptId, userMessage: message });
+            dispatch({ type: 'connection', status: 'error', error: message });
+          },
+        }, { connectionAttemptId });
+        if (!isCurrentAttempt()) {
+          recordConnectionDiagnostic('connection.attempt.result.ignored', 'info', {
+            connectionAttemptId,
+            reason: 'stale-attempt',
+          });
+          return;
+        }
+
+        const currentState = stateRef.current;
+        transport.send(createPlayerHello({ profile: currentState.identity.profile, reconnectToken: currentState.identity.reconnectToken }));
         recordConnectionDiagnostic('client-message.send', 'info', {
-          messageType: 'client:rejoin',
-          lastSeenSequenceNumber: currentState.lastSeenSequenceNumber,
+          connectionAttemptId,
+          messageType: 'player:hello',
         });
+        if (reconnecting || current.everConnected) {
+          transport.send(createRejoin(currentState.identity.profile, currentState.lastSeenSequenceNumber));
+          recordConnectionDiagnostic('client-message.send', 'info', {
+            connectionAttemptId,
+            messageType: 'client:rejoin',
+            lastSeenSequenceNumber: currentState.lastSeenSequenceNumber,
+          });
+        }
+        current.everConnected = true;
+        current.startedAt = 0;
+        current.attempt = 0;
+        window.clearTimeout(current.timer);
+        current.timer = 0;
+        recordConnectionDiagnostic('connection.established', 'info', { connectionAttemptId });
+        dispatch({ type: 'connection', status: 'connected' });
+      } catch (error) {
+        if (!isCurrentAttempt()) {
+          recordConnectionDiagnostic('connection.attempt.failure.ignored', 'info', {
+            connectionAttemptId,
+            reason: 'stale-or-cancelled',
+            ...getDiagnosticErrorDetails(error),
+          });
+          return;
+        }
+        recordConnectionDiagnostic('connection.attempt.failed', 'error', {
+          connectionAttemptId,
+          reconnecting,
+          attempt: current.attempt,
+          ...getDiagnosticErrorDetails(error),
+        });
+        shouldReconnect = true;
+      } finally {
+        if (connectionAttemptRef.current.currentId === connectionAttemptId) {
+          connectionAttemptRef.current.inFlight = null;
+        }
+        if (shouldReconnect && isCurrentAttempt()) scheduleReconnect();
       }
-      current.everConnected = true;
-      current.startedAt = 0;
-      current.attempt = 0;
-      recordConnectionDiagnostic('connection.established');
-      dispatch({ type: 'connection', status: 'connected' });
-    } catch (error) {
-      recordConnectionDiagnostic('connection.attempt.failed', 'error', {
-        reconnecting,
-        attempt: current.attempt,
-        ...getDiagnosticErrorDetails(error),
-      });
-      scheduleReconnect();
-    }
+    })();
+    connectionAttemptRef.current.inFlight = attemptPromise;
+    return attemptPromise;
   }, [handleMessage, onTransportState, scheduleReconnect]);
 
   useEffect(() => {
     connectInternalRef.current = connectInternal;
   }, [connectInternal]);
 
-  const connect = useCallback(async (parameters: JoinParameters): Promise<void> => {
+  const connect = useCallback((parameters: JoinParameters): Promise<void> => {
+    const existingAttempt = connectionAttemptRef.current.inFlight;
+    if (existingAttempt !== null) {
+      recordConnectionDiagnostic('connection.request.deduplicated', 'warning', {
+        connectionAttemptId: connectionAttemptRef.current.currentId,
+      });
+      return existingAttempt;
+    }
+
     clearConnectionDiagnostics();
     recordConnectionDiagnostic('connection.session.started', 'info', getConnectionRuntimeDetails(parameters.roomId));
-    reconnectRef.current = { startedAt: 0, attempt: 0, timer: 0, manuallyClosed: false, everConnected: reconnectRef.current.everConnected };
-    await connectInternal(parameters, false);
+    const current = reconnectRef.current;
+    window.clearTimeout(current.timer);
+    current.startedAt = 0;
+    current.attempt = 0;
+    current.timer = 0;
+    current.manuallyClosed = false;
+    current.everConnected = false;
+    connectionAttemptRef.current.currentId = null;
+    transportRef.current?.close();
+    transportRef.current = null;
+    return connectInternal(parameters, false);
   }, [connectInternal]);
 
   const cancel = useCallback((): void => {
-    recordConnectionDiagnostic('connection.cancelled-by-user');
-    reconnectRef.current.manuallyClosed = true;
-    window.clearTimeout(reconnectRef.current.timer);
-    transportRef.current?.close();
+    recordConnectionDiagnostic('connection.cancelled-by-user', 'info', {
+      connectionAttemptId: connectionAttemptRef.current.currentId,
+    });
+    const current = reconnectRef.current;
+    current.manuallyClosed = true;
+    window.clearTimeout(current.timer);
+    current.timer = 0;
+    connectionAttemptRef.current.currentId = null;
+    connectionAttemptRef.current.inFlight = null;
+    const transport = transportRef.current;
+    transportRef.current = null;
+    transport?.close();
     dispatch({ type: 'connection', status: 'closed' });
   }, []);
 
@@ -199,10 +331,20 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       recordConnectionDiagnostic('connection.retry.skipped', 'warning', { reason: 'join-parameters-unavailable' });
       return;
     }
+    if (connectionAttemptRef.current.inFlight !== null) {
+      recordConnectionDiagnostic('connection.retry.skipped', 'info', {
+        reason: 'connection-attempt-in-flight',
+        connectionAttemptId: connectionAttemptRef.current.currentId,
+      });
+      return;
+    }
     recordConnectionDiagnostic('connection.retry.requested', 'warning', getConnectionRuntimeDetails(parameters.roomId));
-    reconnectRef.current.startedAt = 0;
-    reconnectRef.current.attempt = 0;
-    reconnectRef.current.manuallyClosed = false;
+    const current = reconnectRef.current;
+    window.clearTimeout(current.timer);
+    current.timer = 0;
+    current.startedAt = 0;
+    current.attempt = 0;
+    current.manuallyClosed = false;
     void connectInternal(parameters, true);
   }, [connectInternal]);
 
@@ -253,7 +395,12 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
   useEffect(() => () => {
     reconnectRef.current.manuallyClosed = true;
     window.clearTimeout(reconnectRef.current.timer);
-    transportRef.current?.close();
+    reconnectRef.current.timer = 0;
+    connectionAttemptRef.current.currentId = null;
+    connectionAttemptRef.current.inFlight = null;
+    const transport = transportRef.current;
+    transportRef.current = null;
+    transport?.close();
   }, []);
 
   const updateIdentityAction = useCallback((values: Pick<StoredPlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>): PlayerIdentity => {
@@ -295,6 +442,10 @@ export function useApp(): AppContextValue {
   const context = useContext(AppContext);
   if (!context) throw new Error('useApp must be used inside AppProvider');
   return context;
+}
+
+function createConnectionAttemptId(sequence: number): string {
+  return `web-${Date.now().toString(36)}-${sequence.toString(36)}`;
 }
 
 function hostMessageDiagnosticDetails(message: HostMessage): ConnectionDiagnosticDetails {
