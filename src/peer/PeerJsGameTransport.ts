@@ -1,15 +1,34 @@
 import Peer, { type DataConnection } from 'peerjs';
 import { getDiagnosticErrorDetails, recordConnectionDiagnostic } from '../diagnostics/connectionDiagnostics';
-import { CONNECT_TIMEOUT_MS, PEER_CONNECTION_LABEL } from '../protocol/constants';
+import { CONNECT_TIMEOUT_MS, LEGACY_BRIDGE_READY_GRACE_MS, PEER_CONNECTION_LABEL } from '../protocol/constants';
 import { isMessageWithinLimit } from '../protocol/messageSize';
 import type { ClientMessage, JsonValue } from '../protocol/messages';
 import { parseHostMessage } from '../protocol/parser';
 import type { JoinParameters } from '../features/connection/joinParams';
+import { isPeerJsBridgeReadyMessage } from './bridgeProtocol';
 import { buildPeerJsHostId } from './peerHostId';
 import { createPeerMetadata } from './peerMetadata';
 import type { GameTransport, TransportCallbacks, TransportConnectContext } from './transport';
 
 interface PeerRtcConfiguration extends RTCConfiguration { sdpSemantics?: 'unified-plan' }
+
+
+export function createPeerRtcConfiguration(): PeerRtcConfiguration {
+  return {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      {
+        urls: [
+          'turn:eu-0.turn.peerjs.com:3478',
+          'turn:us-0.turn.peerjs.com:3478',
+        ],
+        username: 'peerjs',
+        credential: 'peerjsp',
+      },
+    ],
+    sdpSemantics: 'unified-plan',
+  };
+}
 type DataConnectionDetails = {
   peer?: string;
   connectionId?: string;
@@ -77,10 +96,7 @@ export class PeerJsGameTransport implements GameTransport {
     callbacks.onState('connecting');
 
     const hostPeerId = buildPeerJsHostId(parameters.roomId);
-    const config: PeerRtcConfiguration = {
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-      sdpSemantics: 'unified-plan',
-    };
+    const config = createPeerRtcConfiguration();
     recordConnectionDiagnostic('transport.connect.started', 'info', {
       connectionAttemptId,
       roomId: parameters.roomId,
@@ -103,6 +119,7 @@ export class PeerJsGameTransport implements GameTransport {
     try {
       await new Promise<void>((resolve, reject) => {
         let settled = false;
+        let bridgeReadyFallbackTimer: number | null = null;
         const timer = window.setTimeout(() => {
           recordConnectionDiagnostic('transport.connect.timeout', 'error', {
             connectionAttemptId,
@@ -114,6 +131,10 @@ export class PeerJsGameTransport implements GameTransport {
           if (settled) return;
           settled = true;
           window.clearTimeout(timer);
+          if (bridgeReadyFallbackTimer !== null) {
+            window.clearTimeout(bridgeReadyFallbackTimer);
+            bridgeReadyFallbackTimer = null;
+          }
           if (this.cancelPendingConnect === cancel) this.cancelPendingConnect = null;
           action();
         };
@@ -170,10 +191,38 @@ export class PeerJsGameTransport implements GameTransport {
               remotePeerId: details.peer ?? hostPeerId,
               connectionId: details.connectionId ?? null,
             });
-            finish(resolve);
+            recordConnectionDiagnostic('data-connection.awaiting-bridge-ready', 'info', {
+              connectionAttemptId,
+              legacyFallbackDelayMs: LEGACY_BRIDGE_READY_GRACE_MS,
+            });
+            if (bridgeReadyFallbackTimer === null && !settled) {
+              bridgeReadyFallbackTimer = window.setTimeout(() => {
+                if (!this.isCurrent(generation, peer, connection) || settled) return;
+                recordConnectionDiagnostic('peerjs.bridge-ready.fallback', 'warning', {
+                  connectionAttemptId,
+                  delayMs: LEGACY_BRIDGE_READY_GRACE_MS,
+                });
+                finish(resolve);
+              }, LEGACY_BRIDGE_READY_GRACE_MS);
+            }
           });
           connection.on('data', (data) => {
-            if (this.isCurrent(generation, peer, connection)) this.handleData(data);
+            if (!this.isCurrent(generation, peer, connection)) return;
+            if (isPeerJsBridgeReadyMessage(data)) {
+              recordConnectionDiagnostic('peerjs.bridge-ready.received', 'info', {
+                connectionAttemptId,
+              });
+              if (!settled) finish(resolve);
+              return;
+            }
+            if (!settled) {
+              recordConnectionDiagnostic('host-message.ignored', 'warning', {
+                connectionAttemptId,
+                reason: 'bridge-not-ready',
+              });
+              return;
+            }
+            this.handleData(data);
           });
           connection.on('close', () => {
             if (!this.isCurrent(generation, peer, connection)) return;
@@ -399,7 +448,7 @@ export function mapPeerError(error: unknown): string {
     case 'webrtc': return 'Nie udało się połączyć z telefonem prowadzącego. Spróbuj innej sieci Wi‑Fi albo wyłącz VPN.';
     case 'server-error': return 'Usługa połączeń jest chwilowo niedostępna.';
     default: return error instanceof Error && error.message === 'timeout'
-      ? 'Przekroczono czas zestawiania połączenia. Sprawdź, czy pokój nadal istnieje.'
+      ? 'Telefon prowadzącego nie odpowiedział na czas. Sprawdź, czy aplikacja prowadzącego nadal działa, i spróbuj ponownie.'
       : 'Nie udało się połączyć z prowadzącym. Sprawdź internet i spróbuj ponownie.';
   }
 }

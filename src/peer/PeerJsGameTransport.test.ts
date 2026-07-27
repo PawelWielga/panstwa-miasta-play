@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SUPPORTED_GAME_PROTOCOL_VERSION } from '../protocol/constants';
+import { LEGACY_BRIDGE_READY_GRACE_MS, SUPPORTED_GAME_PROTOCOL_VERSION } from '../protocol/constants';
 import { clearConnectionDiagnostics, getConnectionDiagnostics } from '../diagnostics/connectionDiagnostics';
 import type { TransportCallbacks } from './transport';
 
@@ -73,7 +73,7 @@ vi.mock('peerjs', () => {
   };
 });
 
-import { PeerJsGameTransport } from './PeerJsGameTransport';
+import { createPeerRtcConfiguration, mapPeerError, PeerJsGameTransport } from './PeerJsGameTransport';
 
 const callbacks = (): TransportCallbacks => ({
   onState: vi.fn(),
@@ -101,6 +101,13 @@ function openConnection(peerIndex = 0, connectionIndex = 0) {
   return connection;
 }
 
+function markBridgeReady(peerIndex = 0, connectionIndex = 0) {
+  const connection = getPeer(peerIndex).connections[connectionIndex];
+  if (!connection) throw new Error(`Missing connection at index ${String(connectionIndex)}.`);
+  connection.emit('data', { type: 'bridge:ready' });
+  return connection;
+}
+
 describe('PeerJsGameTransport', () => {
   beforeEach(() => {
     clearConnectionDiagnostics();
@@ -115,6 +122,24 @@ describe('PeerJsGameTransport', () => {
     vi.restoreAllMocks();
   });
 
+
+  it('configures TURN relay fallbacks in addition to STUN', () => {
+    const configuration = createPeerRtcConfiguration();
+
+    expect(configuration.sdpSemantics).toBe('unified-plan');
+    expect(configuration.iceServers).toEqual([
+      { urls: 'stun:stun.l.google.com:19302' },
+      {
+        urls: [
+          'turn:eu-0.turn.peerjs.com:3478',
+          'turn:us-0.turn.peerjs.com:3478',
+        ],
+        username: 'peerjs',
+        credential: 'peerjsp',
+      },
+    ]);
+  });
+
   it('connects to the host derived only from the room code', async () => {
     const transport = new PeerJsGameTransport();
     const connectPromise = transport.connect(
@@ -125,6 +150,7 @@ describe('PeerJsGameTransport', () => {
 
     const peer = openPeer();
     openConnection();
+    markBridgeReady();
     await connectPromise;
 
     expect(peer.connect).toHaveBeenCalledWith('panstwa-miasta-room-v3-abc123', {
@@ -140,6 +166,87 @@ describe('PeerJsGameTransport', () => {
     expect(openDiagnostic?.details.connectionAttemptId).toBe('attempt-1');
   });
 
+  it('waits for the host bridge readiness signal before exposing open state', async () => {
+    const transport = new PeerJsGameTransport();
+    const transportCallbacks = callbacks();
+    const connectPromise = transport.connect(
+      { roomId: 'ABC123' },
+      transportCallbacks,
+      { connectionAttemptId: 'attempt-ready' },
+    );
+
+    openPeer();
+    const connection = openConnection();
+    await Promise.resolve();
+
+    expect(transportCallbacks.onState).toHaveBeenCalledWith('connecting');
+    expect(transportCallbacks.onState).not.toHaveBeenCalledWith('open');
+
+    connection.emit('data', { type: 'bridge:ready' });
+    await connectPromise;
+
+    expect(transportCallbacks.onState).toHaveBeenCalledWith('open');
+    expect(transportCallbacks.onMessage).not.toHaveBeenCalled();
+    expect(
+      getConnectionDiagnostics().some((entry) => entry.event === 'peerjs.bridge-ready.received'),
+    ).toBe(true);
+  });
+
+  it('falls back after a short grace period for legacy hosts without bridge readiness', async () => {
+    vi.useFakeTimers();
+    const transport = new PeerJsGameTransport();
+    const transportCallbacks = callbacks();
+    const connectPromise = transport.connect(
+      { roomId: 'ABC123' },
+      transportCallbacks,
+      { connectionAttemptId: 'attempt-legacy' },
+    );
+
+    openPeer();
+    const connection = openConnection();
+    await vi.advanceTimersByTimeAsync(LEGACY_BRIDGE_READY_GRACE_MS - 1);
+
+    expect(transportCallbacks.onState).not.toHaveBeenCalledWith('open');
+
+    await vi.advanceTimersByTimeAsync(1);
+    await connectPromise;
+
+    expect(transportCallbacks.onState).toHaveBeenCalledWith('open');
+    expect(
+      getConnectionDiagnostics().some((entry) => entry.event === 'peerjs.bridge-ready.fallback'),
+    ).toBe(true);
+
+    connection.emit('data', { type: 'bridge:ready' });
+    expect(transportCallbacks.onMessage).not.toHaveBeenCalled();
+    expect(transportCallbacks.onError).not.toHaveBeenCalled();
+  });
+
+  it('cancels the legacy fallback after receiving bridge readiness', async () => {
+    vi.useFakeTimers();
+    const transport = new PeerJsGameTransport();
+    const connectPromise = transport.connect(
+      { roomId: 'ABC123' },
+      callbacks(),
+      { connectionAttemptId: 'attempt-current-host' },
+    );
+
+    openPeer();
+    openConnection();
+    markBridgeReady();
+    await connectPromise;
+    await vi.advanceTimersByTimeAsync(LEGACY_BRIDGE_READY_GRACE_MS);
+
+    expect(
+      getConnectionDiagnostics().some((entry) => entry.event === 'peerjs.bridge-ready.fallback'),
+    ).toBe(false);
+  });
+
+  it('maps connection timeout to host availability guidance', () => {
+    expect(mapPeerError(new Error('timeout'))).toBe(
+      'Telefon prowadzącego nie odpowiedział na czas. Sprawdź, czy aplikacja prowadzącego nadal działa, i spróbuj ponownie.',
+    );
+  });
+
   it('deduplicates parallel connect calls on the same transport', async () => {
     const transport = new PeerJsGameTransport();
     const first = transport.connect({ roomId: 'ABC123' }, callbacks());
@@ -150,6 +257,7 @@ describe('PeerJsGameTransport', () => {
 
     const peer = openPeer();
     openConnection();
+    markBridgeReady();
     await Promise.all([first, second]);
 
     expect(peer.connect).toHaveBeenCalledTimes(1);
@@ -183,6 +291,7 @@ describe('PeerJsGameTransport', () => {
 
     secondPeer.emit('open', 'current-client-peer');
     openConnection(1);
+    markBridgeReady(1);
     await second;
 
     expect(secondPeer.connect).toHaveBeenCalledTimes(1);
@@ -195,6 +304,7 @@ describe('PeerJsGameTransport', () => {
 
     peer.emit('open', 'client-peer-again');
     openConnection();
+    markBridgeReady();
     await connectPromise;
 
     expect(peer.connect).toHaveBeenCalledTimes(1);
