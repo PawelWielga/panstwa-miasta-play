@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SUPPORTED_GAME_PROTOCOL_VERSION } from '../protocol/constants';
+import { LEGACY_BRIDGE_READY_GRACE_MS, SUPPORTED_GAME_PROTOCOL_VERSION } from '../protocol/constants';
 import { clearConnectionDiagnostics, getConnectionDiagnostics } from '../diagnostics/connectionDiagnostics';
 import type { TransportCallbacks } from './transport';
 
@@ -73,7 +73,7 @@ vi.mock('peerjs', () => {
   };
 });
 
-import { createPeerRtcConfiguration, PeerJsGameTransport } from './PeerJsGameTransport';
+import { createPeerRtcConfiguration, mapPeerError, PeerJsGameTransport } from './PeerJsGameTransport';
 
 const callbacks = (): TransportCallbacks => ({
   onState: vi.fn(),
@@ -190,6 +190,61 @@ describe('PeerJsGameTransport', () => {
     expect(
       getConnectionDiagnostics().some((entry) => entry.event === 'peerjs.bridge-ready.received'),
     ).toBe(true);
+  });
+
+  it('falls back after a short grace period for legacy hosts without bridge readiness', async () => {
+    vi.useFakeTimers();
+    const transport = new PeerJsGameTransport();
+    const transportCallbacks = callbacks();
+    const connectPromise = transport.connect(
+      { roomId: 'ABC123' },
+      transportCallbacks,
+      { connectionAttemptId: 'attempt-legacy' },
+    );
+
+    openPeer();
+    const connection = openConnection();
+    await vi.advanceTimersByTimeAsync(LEGACY_BRIDGE_READY_GRACE_MS - 1);
+
+    expect(transportCallbacks.onState).not.toHaveBeenCalledWith('open');
+
+    await vi.advanceTimersByTimeAsync(1);
+    await connectPromise;
+
+    expect(transportCallbacks.onState).toHaveBeenCalledWith('open');
+    expect(
+      getConnectionDiagnostics().some((entry) => entry.event === 'peerjs.bridge-ready.fallback'),
+    ).toBe(true);
+
+    connection.emit('data', { type: 'bridge:ready' });
+    expect(transportCallbacks.onMessage).not.toHaveBeenCalled();
+    expect(transportCallbacks.onError).not.toHaveBeenCalled();
+  });
+
+  it('cancels the legacy fallback after receiving bridge readiness', async () => {
+    vi.useFakeTimers();
+    const transport = new PeerJsGameTransport();
+    const connectPromise = transport.connect(
+      { roomId: 'ABC123' },
+      callbacks(),
+      { connectionAttemptId: 'attempt-current-host' },
+    );
+
+    openPeer();
+    openConnection();
+    markBridgeReady();
+    await connectPromise;
+    await vi.advanceTimersByTimeAsync(LEGACY_BRIDGE_READY_GRACE_MS);
+
+    expect(
+      getConnectionDiagnostics().some((entry) => entry.event === 'peerjs.bridge-ready.fallback'),
+    ).toBe(false);
+  });
+
+  it('maps connection timeout to host availability guidance', () => {
+    expect(mapPeerError(new Error('timeout'))).toBe(
+      'Telefon prowadzącego nie odpowiedział na czas. Sprawdź, czy aplikacja prowadzącego nadal działa, i spróbuj ponownie.',
+    );
   });
 
   it('deduplicates parallel connect calls on the same transport', async () => {

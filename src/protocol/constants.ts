@@ -12,7 +12,8 @@ export const ROOM_CODE_LENGTH = 6;
 export const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/;
 export const HEARTBEAT_INTERVAL_MS = 2_000;
 export const HOST_TIMEOUT_MS = 6_000;
-export const CONNECT_TIMEOUT_MS = 10_000;
+export const CONNECT_TIMEOUT_MS = 15_000;
+export const LEGACY_BRIDGE_READY_GRACE_MS = 1_500;
 export const AUTO_RECONNECT_WINDOW_MS = 10_000;
 
 export const clientMessageTypes = [

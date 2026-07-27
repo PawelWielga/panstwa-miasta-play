@@ -1,6 +1,6 @@
 import Peer, { type DataConnection } from 'peerjs';
 import { getDiagnosticErrorDetails, recordConnectionDiagnostic } from '../diagnostics/connectionDiagnostics';
-import { CONNECT_TIMEOUT_MS, PEER_CONNECTION_LABEL } from '../protocol/constants';
+import { CONNECT_TIMEOUT_MS, LEGACY_BRIDGE_READY_GRACE_MS, PEER_CONNECTION_LABEL } from '../protocol/constants';
 import { isMessageWithinLimit } from '../protocol/messageSize';
 import type { ClientMessage, JsonValue } from '../protocol/messages';
 import { parseHostMessage } from '../protocol/parser';
@@ -119,6 +119,7 @@ export class PeerJsGameTransport implements GameTransport {
     try {
       await new Promise<void>((resolve, reject) => {
         let settled = false;
+        let bridgeReadyFallbackTimer: number | null = null;
         const timer = window.setTimeout(() => {
           recordConnectionDiagnostic('transport.connect.timeout', 'error', {
             connectionAttemptId,
@@ -130,6 +131,10 @@ export class PeerJsGameTransport implements GameTransport {
           if (settled) return;
           settled = true;
           window.clearTimeout(timer);
+          if (bridgeReadyFallbackTimer !== null) {
+            window.clearTimeout(bridgeReadyFallbackTimer);
+            bridgeReadyFallbackTimer = null;
+          }
           if (this.cancelPendingConnect === cancel) this.cancelPendingConnect = null;
           action();
         };
@@ -188,7 +193,18 @@ export class PeerJsGameTransport implements GameTransport {
             });
             recordConnectionDiagnostic('data-connection.awaiting-bridge-ready', 'info', {
               connectionAttemptId,
+              legacyFallbackDelayMs: LEGACY_BRIDGE_READY_GRACE_MS,
             });
+            if (bridgeReadyFallbackTimer === null && !settled) {
+              bridgeReadyFallbackTimer = window.setTimeout(() => {
+                if (!this.isCurrent(generation, peer, connection) || settled) return;
+                recordConnectionDiagnostic('peerjs.bridge-ready.fallback', 'warning', {
+                  connectionAttemptId,
+                  delayMs: LEGACY_BRIDGE_READY_GRACE_MS,
+                });
+                finish(resolve);
+              }, LEGACY_BRIDGE_READY_GRACE_MS);
+            }
           });
           connection.on('data', (data) => {
             if (!this.isCurrent(generation, peer, connection)) return;
@@ -432,7 +448,7 @@ export function mapPeerError(error: unknown): string {
     case 'webrtc': return 'Nie udało się połączyć z telefonem prowadzącego. Spróbuj innej sieci Wi‑Fi albo wyłącz VPN.';
     case 'server-error': return 'Usługa połączeń jest chwilowo niedostępna.';
     default: return error instanceof Error && error.message === 'timeout'
-      ? 'Przekroczono czas zestawiania połączenia. Sprawdź, czy pokój nadal istnieje.'
+      ? 'Telefon prowadzącego nie odpowiedział na czas. Sprawdź, czy aplikacja prowadzącego nadal działa, i spróbuj ponownie.'
       : 'Nie udało się połączyć z prowadzącym. Sprawdź internet i spróbuj ponownie.';
   }
 }
