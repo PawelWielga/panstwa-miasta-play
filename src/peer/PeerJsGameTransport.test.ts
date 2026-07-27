@@ -73,7 +73,7 @@ vi.mock('peerjs', () => {
   };
 });
 
-import { PeerJsGameTransport } from './PeerJsGameTransport';
+import { createPeerRtcConfiguration, PeerJsGameTransport } from './PeerJsGameTransport';
 
 const callbacks = (): TransportCallbacks => ({
   onState: vi.fn(),
@@ -120,6 +120,24 @@ describe('PeerJsGameTransport', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+
+  it('configures TURN relay fallbacks in addition to STUN', () => {
+    const configuration = createPeerRtcConfiguration();
+
+    expect(configuration.sdpSemantics).toBe('unified-plan');
+    expect(configuration.iceServers).toEqual([
+      { urls: 'stun:stun.l.google.com:19302' },
+      {
+        urls: [
+          'turn:eu-0.turn.peerjs.com:3478',
+          'turn:us-0.turn.peerjs.com:3478',
+        ],
+        username: 'peerjs',
+        credential: 'peerjsp',
+      },
+    ]);
   });
 
   it('connects to the host derived only from the room code', async () => {

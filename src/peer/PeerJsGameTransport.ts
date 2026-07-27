@@ -11,6 +11,24 @@ import { createPeerMetadata } from './peerMetadata';
 import type { GameTransport, TransportCallbacks, TransportConnectContext } from './transport';
 
 interface PeerRtcConfiguration extends RTCConfiguration { sdpSemantics?: 'unified-plan' }
+
+
+export function createPeerRtcConfiguration(): PeerRtcConfiguration {
+  return {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      {
+        urls: [
+          'turn:eu-0.turn.peerjs.com:3478',
+          'turn:us-0.turn.peerjs.com:3478',
+        ],
+        username: 'peerjs',
+        credential: 'peerjsp',
+      },
+    ],
+    sdpSemantics: 'unified-plan',
+  };
+}
 type DataConnectionDetails = {
   peer?: string;
   connectionId?: string;
@@ -78,10 +96,7 @@ export class PeerJsGameTransport implements GameTransport {
     callbacks.onState('connecting');
 
     const hostPeerId = buildPeerJsHostId(parameters.roomId);
-    const config: PeerRtcConfiguration = {
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-      sdpSemantics: 'unified-plan',
-    };
+    const config = createPeerRtcConfiguration();
     recordConnectionDiagnostic('transport.connect.started', 'info', {
       connectionAttemptId,
       roomId: parameters.roomId,
