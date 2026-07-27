@@ -192,7 +192,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       && !reconnectRef.current.manuallyClosed;
 
     let handshakeSent = false;
-    let handshakeError: unknown = null;
+    let handshakeError: Error | null = null;
     const sendInitialHandshake = (): void => {
       if (handshakeSent || !isCurrentAttempt()) return;
       try {
@@ -217,10 +217,10 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         }
         handshakeSent = true;
       } catch (error) {
-        handshakeError = error;
+        handshakeError = error instanceof Error ? error : new Error(String(error));
         recordConnectionDiagnostic('client-handshake.send.failed', 'error', {
           connectionAttemptId,
-          ...getDiagnosticErrorDetails(error),
+          ...getDiagnosticErrorDetails(handshakeError),
         });
         transport.close();
       }
