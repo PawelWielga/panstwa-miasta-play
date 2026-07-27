@@ -74,9 +74,25 @@ peer.connect(hostPeerId, {
 
 Dla pokoju `ABC123` techniczny identyfikator hosta ma postać `panstwa-miasta-room-v3-abc123`. Jest to szczegół developerski i nie jest wyświetlany graczowi.
 
-Po otwarciu połączenia wysyłany jest bezpośrednio obiekt `player:hello`. Nie ma dodatkowej koperty `event/payload`. `reconnectToken` znajduje się tylko w hello i pamięci lokalnej. Nie jest częścią publicznego obiektu gracza.
+Po otwarciu `DataConnection` klient czeka najpierw na transportowy komunikat `bridge:ready` z `appVersion`, liczbowym `buildNumber` i `protocolVersion`. Dopiero po zaakceptowaniu wersji hosta transport przechodzi do stanu `open` i wysyłany jest bezpośrednio obiekt `player:hello`. `bridge:ready` nie trafia do parsera wiadomości gry. Nie ma dodatkowej koperty `event/payload`. `reconnectToken` znajduje się tylko w hello i pamięci lokalnej. Nie jest częścią publicznego obiektu gracza.
 
 Każda mutacja otrzymuje nowy `requestId`. Przed wysłaniem aplikacja liczy rozmiar UTF-8 zserializowanej wiadomości i odrzuca obiekty większe niż 64 KiB.
+
+
+## Zgodność wersji hosta
+
+Klient WWW obsługuje wyłącznie najnowszą świadomie wspieraną wersję aplikacji Android. Zgodność wsteczna ze starszym hostem nie jest gwarantowana. Host bez pełnych informacji o wersji, ze zbyt niskim `buildNumber` albo z inną wersją protokołu jest odrzucany przed `player:hello` i `client:rejoin`.
+
+Minimalny wspierany build i wymagana wersja protokołu są utrzymywane ręcznie w `src/config/hostCompatibility.ts`:
+
+```ts
+export const MIN_SUPPORTED_HOST_BUILD_NUMBER = 10;
+export const REQUIRED_HOST_PROTOCOL_VERSION = 3;
+```
+
+`buildNumber` odpowiada Androidowemu `versionCode`; tekstowe `appVersion` służy tylko diagnostyce. Zmiana minimum wymaga jednoczesnej aktualizacji testów i dokumentacji. Klient nie odpytuje Google Play ani zewnętrznego API.
+
+Przy błędzie `host-version-unsupported` połączenie jest zamykane, automatyczny reconnect nie jest uruchamiany, a użytkownik widzi komunikat wymagający aktualizacji aplikacji prowadzącego.
 
 ## Reconnect i Safari
 

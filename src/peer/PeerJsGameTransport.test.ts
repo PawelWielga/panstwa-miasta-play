@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LEGACY_BRIDGE_READY_GRACE_MS, SUPPORTED_GAME_PROTOCOL_VERSION } from '../protocol/constants';
+import {
+  HOST_VERSION_HANDSHAKE_TIMEOUT_MS,
+  HOST_VERSION_UNSUPPORTED_MESSAGE,
+  MIN_SUPPORTED_HOST_BUILD_NUMBER,
+  REQUIRED_HOST_PROTOCOL_VERSION,
+} from '../config/hostCompatibility';
+import { SUPPORTED_GAME_PROTOCOL_VERSION } from '../protocol/constants';
 import { clearConnectionDiagnostics, getConnectionDiagnostics } from '../diagnostics/connectionDiagnostics';
 import type { TransportCallbacks } from './transport';
 
@@ -101,10 +107,20 @@ function openConnection(peerIndex = 0, connectionIndex = 0) {
   return connection;
 }
 
-function markBridgeReady(peerIndex = 0, connectionIndex = 0) {
+function markBridgeReady(
+  peerIndex = 0,
+  connectionIndex = 0,
+  overrides: Partial<{ appVersion: string; buildNumber: number; protocolVersion: number }> = {},
+) {
   const connection = getPeer(peerIndex).connections[connectionIndex];
   if (!connection) throw new Error(`Missing connection at index ${String(connectionIndex)}.`);
-  connection.emit('data', { type: 'bridge:ready' });
+  connection.emit('data', {
+    type: 'bridge:ready',
+    appVersion: '1.1.7',
+    buildNumber: MIN_SUPPORTED_HOST_BUILD_NUMBER,
+    protocolVersion: REQUIRED_HOST_PROTOCOL_VERSION,
+    ...overrides,
+  });
   return connection;
 }
 
@@ -182,63 +198,99 @@ describe('PeerJsGameTransport', () => {
     expect(transportCallbacks.onState).toHaveBeenCalledWith('connecting');
     expect(transportCallbacks.onState).not.toHaveBeenCalledWith('open');
 
-    connection.emit('data', { type: 'bridge:ready' });
+    markBridgeReady();
     await connectPromise;
 
     expect(transportCallbacks.onState).toHaveBeenCalledWith('open');
     expect(transportCallbacks.onMessage).not.toHaveBeenCalled();
     expect(
-      getConnectionDiagnostics().some((entry) => entry.event === 'peerjs.bridge-ready.received'),
+      getConnectionDiagnostics().some((entry) => entry.event === 'peerjs.bridge-ready.accepted'),
     ).toBe(true);
   });
 
-  it('falls back after a short grace period for legacy hosts without bridge readiness', async () => {
+  it('rejects a host without version metadata and does not expose open state', async () => {
+    const transport = new PeerJsGameTransport();
+    const transportCallbacks = callbacks();
+    const connectPromise = transport.connect(
+      { roomId: 'ABC123' },
+      transportCallbacks,
+      { connectionAttemptId: 'attempt-missing-version' },
+    );
+
+    openPeer();
+    const connection = openConnection();
+    connection.emit('data', { type: 'bridge:ready' });
+
+    await expect(connectPromise).rejects.toMatchObject({
+      code: 'host-version-unsupported',
+      reason: 'missing-version-info',
+    });
+    expect(connection.close).toHaveBeenCalled();
+    expect(transportCallbacks.onState).not.toHaveBeenCalledWith('open');
+    expect(transportCallbacks.onError).toHaveBeenCalledWith(HOST_VERSION_UNSUPPORTED_MESSAGE);
+    expect(transportCallbacks.onMessage).not.toHaveBeenCalled();
+  });
+
+  it('rejects a host below the minimum build number', async () => {
+    const transport = new PeerJsGameTransport();
+    const transportCallbacks = callbacks();
+    const connectPromise = transport.connect(
+      { roomId: 'ABC123' },
+      transportCallbacks,
+      { connectionAttemptId: 'attempt-old-build' },
+    );
+
+    openPeer();
+    openConnection();
+    markBridgeReady(0, 0, { buildNumber: MIN_SUPPORTED_HOST_BUILD_NUMBER - 1 });
+
+    await expect(connectPromise).rejects.toMatchObject({ reason: 'build-number-too-low' });
+    expect(transportCallbacks.onState).not.toHaveBeenCalledWith('open');
+    expect(transportCallbacks.onMessage).not.toHaveBeenCalled();
+    expect(getConnectionDiagnostics()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        event: 'peerjs.bridge-ready.rejected',
+        details: expect.objectContaining({
+          detectedBuildNumber: MIN_SUPPORTED_HOST_BUILD_NUMBER - 1,
+          minimumBuildNumber: MIN_SUPPORTED_HOST_BUILD_NUMBER,
+          reason: 'build-number-too-low',
+        }),
+      }),
+    ]));
+  });
+
+  it('rejects a host with an incompatible protocol version', async () => {
+    const transport = new PeerJsGameTransport();
+    const connectPromise = transport.connect(
+      { roomId: 'ABC123' },
+      callbacks(),
+      { connectionAttemptId: 'attempt-old-protocol' },
+    );
+
+    openPeer();
+    openConnection();
+    markBridgeReady(0, 0, { protocolVersion: REQUIRED_HOST_PROTOCOL_VERSION - 1 });
+
+    await expect(connectPromise).rejects.toMatchObject({ reason: 'protocol-version-mismatch' });
+  });
+
+  it('treats a missing bridge readiness signal as an unsupported legacy host', async () => {
     vi.useFakeTimers();
     const transport = new PeerJsGameTransport();
     const transportCallbacks = callbacks();
     const connectPromise = transport.connect(
       { roomId: 'ABC123' },
       transportCallbacks,
-      { connectionAttemptId: 'attempt-legacy' },
-    );
-
-    openPeer();
-    const connection = openConnection();
-    await vi.advanceTimersByTimeAsync(LEGACY_BRIDGE_READY_GRACE_MS - 1);
-
-    expect(transportCallbacks.onState).not.toHaveBeenCalledWith('open');
-
-    await vi.advanceTimersByTimeAsync(1);
-    await connectPromise;
-
-    expect(transportCallbacks.onState).toHaveBeenCalledWith('open');
-    expect(
-      getConnectionDiagnostics().some((entry) => entry.event === 'peerjs.bridge-ready.fallback'),
-    ).toBe(true);
-
-    connection.emit('data', { type: 'bridge:ready' });
-    expect(transportCallbacks.onMessage).not.toHaveBeenCalled();
-    expect(transportCallbacks.onError).not.toHaveBeenCalled();
-  });
-
-  it('cancels the legacy fallback after receiving bridge readiness', async () => {
-    vi.useFakeTimers();
-    const transport = new PeerJsGameTransport();
-    const connectPromise = transport.connect(
-      { roomId: 'ABC123' },
-      callbacks(),
-      { connectionAttemptId: 'attempt-current-host' },
+      { connectionAttemptId: 'attempt-no-ready' },
     );
 
     openPeer();
     openConnection();
-    markBridgeReady();
-    await connectPromise;
-    await vi.advanceTimersByTimeAsync(LEGACY_BRIDGE_READY_GRACE_MS);
+    await vi.advanceTimersByTimeAsync(HOST_VERSION_HANDSHAKE_TIMEOUT_MS);
 
-    expect(
-      getConnectionDiagnostics().some((entry) => entry.event === 'peerjs.bridge-ready.fallback'),
-    ).toBe(false);
+    await expect(connectPromise).rejects.toMatchObject({ reason: 'missing-version-info' });
+    expect(transportCallbacks.onState).not.toHaveBeenCalledWith('open');
+    expect(getConnectionDiagnostics().some((entry) => entry.event === 'peerjs.bridge-ready.fallback')).toBe(false);
   });
 
   it('maps connection timeout to host availability guidance', () => {

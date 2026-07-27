@@ -1,11 +1,21 @@
 import Peer, { type DataConnection } from 'peerjs';
+import {
+  assertHostVersionSupported,
+  HOST_VERSION_HANDSHAKE_TIMEOUT_MS,
+  HOST_VERSION_UNSUPPORTED_MESSAGE,
+  HostVersionUnsupportedError,
+  isHostVersionUnsupportedError,
+  MIN_SUPPORTED_HOST_BUILD_NUMBER,
+  REQUIRED_HOST_PROTOCOL_VERSION,
+  type HostVersionInfo,
+} from '../config/hostCompatibility';
 import { getDiagnosticErrorDetails, recordConnectionDiagnostic } from '../diagnostics/connectionDiagnostics';
-import { CONNECT_TIMEOUT_MS, LEGACY_BRIDGE_READY_GRACE_MS, PEER_CONNECTION_LABEL } from '../protocol/constants';
+import { CONNECT_TIMEOUT_MS, PEER_CONNECTION_LABEL } from '../protocol/constants';
 import { isMessageWithinLimit } from '../protocol/messageSize';
 import type { ClientMessage, JsonValue } from '../protocol/messages';
 import { parseHostMessage } from '../protocol/parser';
 import type { JoinParameters } from '../features/connection/joinParams';
-import { isPeerJsBridgeReadyMessage } from './bridgeProtocol';
+import { isPeerJsBridgeReadyMessage, parsePeerJsBridgeReadyMessage } from './bridgeProtocol';
 import { buildPeerJsHostId } from './peerHostId';
 import { createPeerMetadata } from './peerMetadata';
 import type { GameTransport, TransportCallbacks, TransportConnectContext } from './transport';
@@ -119,7 +129,7 @@ export class PeerJsGameTransport implements GameTransport {
     try {
       await new Promise<void>((resolve, reject) => {
         let settled = false;
-        let bridgeReadyFallbackTimer: number | null = null;
+        let hostVersionTimer: number | null = null;
         const timer = window.setTimeout(() => {
           recordConnectionDiagnostic('transport.connect.timeout', 'error', {
             connectionAttemptId,
@@ -131,9 +141,9 @@ export class PeerJsGameTransport implements GameTransport {
           if (settled) return;
           settled = true;
           window.clearTimeout(timer);
-          if (bridgeReadyFallbackTimer !== null) {
-            window.clearTimeout(bridgeReadyFallbackTimer);
-            bridgeReadyFallbackTimer = null;
+          if (hostVersionTimer !== null) {
+            window.clearTimeout(hostVersionTimer);
+            hostVersionTimer = null;
           }
           if (this.cancelPendingConnect === cancel) this.cancelPendingConnect = null;
           action();
@@ -191,28 +201,48 @@ export class PeerJsGameTransport implements GameTransport {
               remotePeerId: details.peer ?? hostPeerId,
               connectionId: details.connectionId ?? null,
             });
-            recordConnectionDiagnostic('data-connection.awaiting-bridge-ready', 'info', {
+            recordConnectionDiagnostic('data-connection.awaiting-host-version', 'info', {
               connectionAttemptId,
-              legacyFallbackDelayMs: LEGACY_BRIDGE_READY_GRACE_MS,
+              timeoutMs: HOST_VERSION_HANDSHAKE_TIMEOUT_MS,
+              minimumBuildNumber: MIN_SUPPORTED_HOST_BUILD_NUMBER,
+              requiredProtocolVersion: REQUIRED_HOST_PROTOCOL_VERSION,
             });
-            if (bridgeReadyFallbackTimer === null && !settled) {
-              bridgeReadyFallbackTimer = window.setTimeout(() => {
+            if (hostVersionTimer === null && !settled) {
+              hostVersionTimer = window.setTimeout(() => {
                 if (!this.isCurrent(generation, peer, connection) || settled) return;
-                recordConnectionDiagnostic('peerjs.bridge-ready.fallback', 'warning', {
-                  connectionAttemptId,
-                  delayMs: LEGACY_BRIDGE_READY_GRACE_MS,
-                });
-                finish(resolve);
-              }, LEGACY_BRIDGE_READY_GRACE_MS);
+                const error = new HostVersionUnsupportedError('missing-version-info');
+                recordHostVersionRejection(connectionAttemptId, error);
+                fail(error);
+              }, HOST_VERSION_HANDSHAKE_TIMEOUT_MS);
             }
           });
           connection.on('data', (data) => {
             if (!this.isCurrent(generation, peer, connection)) return;
             if (isPeerJsBridgeReadyMessage(data)) {
-              recordConnectionDiagnostic('peerjs.bridge-ready.received', 'info', {
-                connectionAttemptId,
-              });
-              if (!settled) finish(resolve);
+              const hostVersion = parsePeerJsBridgeReadyMessage(data);
+              if (hostVersion === null) {
+                const error = new HostVersionUnsupportedError('missing-version-info');
+                recordHostVersionRejection(connectionAttemptId, error);
+                if (!settled) fail(error);
+                return;
+              }
+              try {
+                assertHostVersionSupported(hostVersion);
+                recordConnectionDiagnostic('peerjs.bridge-ready.accepted', 'info', {
+                  connectionAttemptId,
+                  ...hostVersionDiagnosticDetails(hostVersion),
+                  minimumBuildNumber: MIN_SUPPORTED_HOST_BUILD_NUMBER,
+                  requiredProtocolVersion: REQUIRED_HOST_PROTOCOL_VERSION,
+                });
+                if (!settled) finish(resolve);
+              } catch (error) {
+                if (isHostVersionUnsupportedError(error)) {
+                  recordHostVersionRejection(connectionAttemptId, error);
+                  if (!settled) fail(error);
+                } else {
+                  fail(error);
+                }
+              }
               return;
             }
             if (!settled) {
@@ -287,7 +317,7 @@ export class PeerJsGameTransport implements GameTransport {
           ...getDiagnosticErrorDetails(error),
           userMessage,
         });
-        callbacks.onState('error');
+        if (!isHostVersionUnsupportedError(error)) callbacks.onState('error');
         callbacks.onError(userMessage);
       } else {
         recordConnectionDiagnostic('transport.connect.result.ignored', 'info', {
@@ -439,7 +469,29 @@ export class PeerJsGameTransport implements GameTransport {
   }
 }
 
+function hostVersionDiagnosticDetails(hostVersion: Partial<HostVersionInfo>) {
+  return {
+    detectedAppVersion: hostVersion.appVersion ?? null,
+    detectedBuildNumber: hostVersion.buildNumber ?? null,
+    detectedProtocolVersion: hostVersion.protocolVersion ?? null,
+  };
+}
+
+function recordHostVersionRejection(
+  connectionAttemptId: string,
+  error: HostVersionUnsupportedError,
+): void {
+  recordConnectionDiagnostic('peerjs.bridge-ready.rejected', 'error', {
+    connectionAttemptId,
+    ...hostVersionDiagnosticDetails(error.hostVersion),
+    minimumBuildNumber: MIN_SUPPORTED_HOST_BUILD_NUMBER,
+    requiredProtocolVersion: REQUIRED_HOST_PROTOCOL_VERSION,
+    reason: error.reason,
+  });
+}
+
 export function mapPeerError(error: unknown): string {
+  if (isHostVersionUnsupportedError(error)) return HOST_VERSION_UNSUPPORTED_MESSAGE;
   const type = typeof error === 'object' && error !== null && 'type' in error ? String(error.type) : '';
   switch (type) {
     case 'peer-unavailable': return 'Brak aktywnego pokoju o podanym kodzie. Sprawdź kod albo poproś prowadzącego o utworzenie pokoju.';

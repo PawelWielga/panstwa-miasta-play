@@ -25,6 +25,31 @@ Format identyfikatora hosta to `panstwa-miasta-room-v{wersja}-{kod-małymi-liter
 
 Komunikaty są wysyłane jako bezpośrednie obiekty JSON. Nie stosuje się dodatkowej koperty `event/payload`.
 
+
+### Handshake wersji hosta
+
+Po otwarciu `DataConnection` host wysyła transportowy komunikat kontrolny:
+
+```ts
+{
+  type: 'bridge:ready';
+  appVersion: string;
+  buildNumber: number;
+  protocolVersion: number;
+}
+```
+
+`buildNumber` jest Androidowym `versionCode` i służy do porównywania wydań. `appVersion` jest wyłącznie informacją diagnostyczną. Komunikat jest walidowany przed wysłaniem `player:hello` i nie trafia do parsera wiadomości gry.
+
+Klient WWW obsługuje tylko najnowszą świadomie wspieraną wersję hosta. Aktualne wymagania są ustawiane ręcznie w `src/config/hostCompatibility.ts`:
+
+```ts
+export const MIN_SUPPORTED_HOST_BUILD_NUMBER = 10;
+export const REQUIRED_HOST_PROTOCOL_VERSION = 3;
+```
+
+Brak `bridge:ready`, brak któregokolwiek pola wersji, zbyt niski `buildNumber` lub inna wersja protokołu powoduje błąd `host-version-unsupported`. `DataConnection` jest zamykane, klient nie wysyła `player:hello` ani `client:rejoin` i nie uruchamia automatycznego reconnectu. Zmiana wymaganej wersji hosta musi być wdrożona razem z testami i aktualizacją dokumentacji. Klient nie pobiera wersji z Google Play ani z zewnętrznego backendu.
+
 ## Ograniczenia i identyfikatory
 
 - maksymalny rozmiar wiadomości: 64 KiB po serializacji UTF-8,
@@ -64,7 +89,7 @@ interface PlayerProfile {
 
 ### `player:hello`
 
-Wysyłana natychmiast po otwarciu DataConnection oraz ponownie podczas reconnect.
+Wysyłana natychmiast po zaakceptowaniu transportowego `bridge:ready` oraz ponownie podczas reconnect.
 
 ```ts
 {

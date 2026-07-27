@@ -16,6 +16,10 @@ import {
   recordConnectionDiagnostic,
   type ConnectionDiagnosticDetails,
 } from '../diagnostics/connectionDiagnostics';
+import {
+  HOST_VERSION_UNSUPPORTED_MESSAGE,
+  isHostVersionUnsupportedError,
+} from '../config/hostCompatibility';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
 import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createSubmit } from '../protocol/outgoing';
 import type { ClientMessage, HostMessage } from '../protocol/messages';
@@ -87,6 +91,10 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
   const scheduleReconnect = useCallback((): void => {
     const current = reconnectRef.current;
     const parameters = stateRef.current.joinParameters;
+    if (stateRef.current.connectionError === HOST_VERSION_UNSUPPORTED_MESSAGE) {
+      recordConnectionDiagnostic('reconnect.skipped', 'info', { reason: 'host-version-unsupported' });
+      return;
+    }
     if (current.manuallyClosed || parameters === null) {
       recordConnectionDiagnostic('reconnect.skipped', 'info', {
         reason: current.manuallyClosed ? 'manually-closed' : 'join-parameters-unavailable',
@@ -291,7 +299,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
           attempt: current.attempt,
           ...getDiagnosticErrorDetails(error),
         });
-        shouldReconnect = true;
+        shouldReconnect = !isHostVersionUnsupportedError(error);
       } finally {
         if (connectionAttemptRef.current.currentId === connectionAttemptId) {
           connectionAttemptRef.current.inFlight = null;
@@ -349,6 +357,10 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
 
   const retry = useCallback((): void => {
     const parameters = stateRef.current.joinParameters;
+    if (stateRef.current.connectionError === HOST_VERSION_UNSUPPORTED_MESSAGE) {
+      recordConnectionDiagnostic('connection.retry.skipped', 'info', { reason: 'host-version-unsupported' });
+      return;
+    }
     if (!parameters) {
       recordConnectionDiagnostic('connection.retry.skipped', 'warning', { reason: 'join-parameters-unavailable' });
       return;

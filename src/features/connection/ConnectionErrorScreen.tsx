@@ -1,5 +1,6 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { useApp } from '../../app/AppContext';
+import { HOST_VERSION_UNSUPPORTED_MESSAGE } from '../../config/hostCompatibility';
 import { Card, Layout } from '../../components/Layout';
 import {
   formatConnectionDiagnostics,
@@ -16,6 +17,7 @@ export function ConnectionErrorScreen() {
   );
   const diagnosticText = useMemo(() => formatConnectionDiagnostics(diagnostics), [diagnostics]);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const requiresHostUpdate = state.connectionError === HOST_VERSION_UNSUPPORTED_MESSAGE;
 
   const copyDiagnostics = async (): Promise<void> => {
     try {
@@ -29,13 +31,15 @@ export function ConnectionErrorScreen() {
   return <Layout>
     <Card className="center-card error-card">
       <div className="error-icon">!</div>
-      <h1>Nie udało się połączyć</h1>
+      <h1>{requiresHostUpdate ? 'Prowadzący musi zaktualizować grę' : 'Nie udało się połączyć'}</h1>
       <p>{state.connectionError ?? 'Telefon prowadzącego może być niedostępny albo połączenie zostało przerwane.'}</p>
       <div className="button-row">
-        <button className="button button-primary" onClick={actions.retry}>Spróbuj ponownie</button>
+        {!requiresHostUpdate && <button className="button button-primary" onClick={actions.retry}>Spróbuj ponownie</button>}
         <button className="button button-secondary" onClick={actions.cancel}>Wróć</button>
       </div>
-      <small>Sprawdź kod pokoju, połączenie z internetem albo ponownie otwórz kod QR.</small>
+      <small>{requiresHostUpdate
+        ? 'Po aktualizacji aplikacji prowadzący powinien utworzyć pokój ponownie.'
+        : 'Sprawdź kod pokoju, połączenie z internetem albo ponownie otwórz kod QR.'}</small>
       <details className="connection-diagnostics">
         <summary>Szczegóły diagnostyczne ({diagnostics.length})</summary>
         <p>Log nie zawiera nicku, odpowiedzi ani tokenu ponownego połączenia.</p>

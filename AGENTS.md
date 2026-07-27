@@ -20,3 +20,8 @@ Nie należy tworzyć niezależnego kierunku wizualnego ani traktować aktualnej 
 ### Logika gry i multiplayer
 
 Repozytorium [`PawelWielga/panstwa-miasta`](https://github.com/PawelWielga/panstwa-miasta) pozostaje źródłem prawdy dla protokołu multiplayer, stanu gry, rund, odpowiedzi, oceniania, głosowania i punktacji. Aplikacja Android jest hostem i systemem autorytatywnym, a klient WWW powinien odwzorowywać otrzymany stan zamiast duplikować silnik gry.
+
+### Zgodność wersji hosta
+
+Klient WWW obsługuje wyłącznie ręcznie wskazaną, wspieraną wersję hosta Android. Minimalny `buildNumber` i wymagana wersja protokołu są utrzymywane centralnie w `src/config/hostCompatibility.ts`. Każda zmiana tych wartości musi obejmować testy i dokumentację; nie należy dodawać cichego fallbacku dla hostów bez metadanych wersji.
+
