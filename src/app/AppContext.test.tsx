@@ -80,7 +80,7 @@ describe('AppProvider connection lifecycle', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 
-  it('deduplicates concurrent user connect actions and sends hello only after open', async () => {
+  it('deduplicates concurrent user connect actions and sends hello synchronously on open', async () => {
     const transports: DeferredTransport[] = [];
     renderProvider(() => {
       const transport = new DeferredTransport();
@@ -101,13 +101,21 @@ describe('AppProvider connection lifecycle', () => {
     expect(getTransport(transports, 0).send).not.toHaveBeenCalled();
     expect(getTransport(transports, 0).context?.connectionAttemptId).toMatch(/^web-/);
 
-    await act(async () => {
+    act(() => {
       getTransport(transports, 0).open();
+    });
+
+    expect(getTransport(transports, 0).send).toHaveBeenCalledTimes(1);
+    expect(getTransport(transports, 0).send).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ type: 'player:hello' }),
+    );
+
+    await act(async () => {
       await first;
     });
 
     expect(getTransport(transports, 0).send).toHaveBeenCalledTimes(1);
-    expect(getTransport(transports, 0).send).toHaveBeenCalledWith(expect.objectContaining({ type: 'player:hello' }));
   });
 
   it('does not start retry while the previous attempt is still in flight', async () => {
@@ -165,6 +173,13 @@ describe('AppProvider connection lifecycle', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
 
     expect(transports).toHaveLength(2);
-    expect(getTransport(transports, 1).send).toHaveBeenCalledWith(expect.objectContaining({ type: 'player:hello' }));
+    expect(getTransport(transports, 1).send).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ type: 'player:hello' }),
+    );
+    expect(getTransport(transports, 1).send).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ type: 'client:rejoin' }),
+    );
   });
 });

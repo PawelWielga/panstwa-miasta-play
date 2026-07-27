@@ -191,6 +191,41 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       && transportRef.current === transport
       && !reconnectRef.current.manuallyClosed;
 
+    let handshakeSent = false;
+    const sendInitialHandshake = (): void => {
+      if (handshakeSent || !isCurrentAttempt()) return;
+      try {
+        const currentState = stateRef.current;
+        transport.send(createPlayerHello({
+          profile: currentState.identity.profile,
+          reconnectToken: currentState.identity.reconnectToken,
+        }));
+        recordConnectionDiagnostic('client-message.send', 'info', {
+          connectionAttemptId,
+          messageType: 'player:hello',
+          trigger: 'transport-open',
+        });
+        if (reconnecting || current.everConnected) {
+          transport.send(createRejoin(currentState.identity.profile, currentState.lastSeenSequenceNumber));
+          recordConnectionDiagnostic('client-message.send', 'info', {
+            connectionAttemptId,
+            messageType: 'client:rejoin',
+            lastSeenSequenceNumber: currentState.lastSeenSequenceNumber,
+            trigger: 'transport-open',
+          });
+        }
+        handshakeSent = true;
+      } catch (error) {
+        const normalizedError = error instanceof Error ? error : new Error(String(error));
+        recordConnectionDiagnostic('client-handshake.send.failed', 'error', {
+          connectionAttemptId,
+          ...getDiagnosticErrorDetails(normalizedError),
+        });
+        transport.close();
+        throw normalizedError;
+      }
+    };
+
     let shouldReconnect = false;
     const attemptPromise = (async (): Promise<void> => {
       try {
@@ -204,6 +239,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
               });
               return;
             }
+            if (transportState === 'open') sendInitialHandshake();
             onTransportState(transportState, connectionAttemptId);
           },
           onMessage: (message) => {
@@ -233,20 +269,6 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
           return;
         }
 
-        const currentState = stateRef.current;
-        transport.send(createPlayerHello({ profile: currentState.identity.profile, reconnectToken: currentState.identity.reconnectToken }));
-        recordConnectionDiagnostic('client-message.send', 'info', {
-          connectionAttemptId,
-          messageType: 'player:hello',
-        });
-        if (reconnecting || current.everConnected) {
-          transport.send(createRejoin(currentState.identity.profile, currentState.lastSeenSequenceNumber));
-          recordConnectionDiagnostic('client-message.send', 'info', {
-            connectionAttemptId,
-            messageType: 'client:rejoin',
-            lastSeenSequenceNumber: currentState.lastSeenSequenceNumber,
-          });
-        }
         current.everConnected = true;
         current.startedAt = 0;
         current.attempt = 0;
