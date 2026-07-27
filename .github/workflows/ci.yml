@@ -37,21 +37,7 @@ jobs:
         run: npm ci
 
       - name: Lint
-        id: lint
-        shell: bash
-        run: |
-          set +e
-          npm run lint > lint.log 2>&1
-          status=$?
-          cat lint.log
-          exit "$status"
-
-      - name: Upload lint diagnostics
-        if: failure() && steps.lint.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: lint-diagnostics
-          path: lint.log
+        run: npm run lint
 
       - name: Type check
         run: npm run typecheck
