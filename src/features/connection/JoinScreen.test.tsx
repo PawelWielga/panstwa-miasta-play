@@ -33,6 +33,17 @@ describe('JoinScreen', () => {
     expect(screen.queryByText(/Wybierz kolor/i)).not.toBeInTheDocument();
   });
 
+  it('shows host instructions instead of the join form when online play is disabled', () => {
+    mocked.value = createValue();
+    render(<JoinScreen search="?room=ABC123&online=disabled" />);
+
+    expect(screen.getByRole('heading', { name: 'Host musi włączyć dołączanie online' })).toBeInTheDocument();
+    expect(screen.getByText(/Dołączanie przez internet \(Peer\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/ABC123/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Dołącz do gry' })).not.toBeInTheDocument();
+    expect(mocked.value.actions.connect).not.toHaveBeenCalled();
+  });
+
   it('blocks an incompatible legacy invitation without exposing a protocol field', async () => {
     mocked.value = createValue();
     render(<JoinScreen search="?room=ABC123&protocol=999" />);
