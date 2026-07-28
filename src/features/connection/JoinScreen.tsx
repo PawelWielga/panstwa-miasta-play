@@ -2,6 +2,7 @@ import { useMemo, useState, type SyntheticEvent } from 'react';
 import { useApp } from '../../app/AppContext';
 import { Card, Layout } from '../../components/Layout';
 import { PLAYER_NAME_MAX_LENGTH } from '../../protocol/constants';
+import { OnlineJoinDisabledScreen } from './OnlineJoinDisabledScreen';
 import {
   normalizeRoomId,
   parseJoinParameters,
@@ -14,11 +15,17 @@ type FormErrorKey = 'name' | JoinParameterErrorKey;
 
 export function JoinScreen({ search = window.location.search }: { search?: string }) {
   const { state, actions } = useApp();
+  const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const parsed = useMemo(() => parseJoinParameters(search), [search]);
-  const rawRoomId = new URLSearchParams(search).get('room') ?? '';
+  const rawRoomId = searchParams.get('room') ?? '';
+  const onlineJoinDisabled = searchParams.get('online')?.trim().toLowerCase() === 'disabled';
   const [parameters, setParameters] = useState<JoinParameters>(parsed.value ?? { roomId: rawRoomId.trim().toUpperCase() });
   const [name, setName] = useState(state.identity.playerName);
   const [errors, setErrors] = useState<Partial<Record<FormErrorKey, string>>>({});
+
+  if (onlineJoinDisabled) {
+    return <OnlineJoinDisabledScreen roomId={rawRoomId} />;
+  }
 
   const submit = (event: SyntheticEvent<HTMLFormElement>): void => {
     event.preventDefault();
