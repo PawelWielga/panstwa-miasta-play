@@ -1,6 +1,10 @@
 import { act, render } from '@testing-library/react';
 import { useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  HOST_VERSION_UNSUPPORTED_MESSAGE,
+  HostVersionUnsupportedError,
+} from '../config/hostCompatibility';
 import type { ClientMessage } from '../protocol/messages';
 import type {
   GameTransport,
@@ -45,6 +49,15 @@ class DeferredTransport implements GameTransport {
   fail(message = 'failed'): void {
     this.callbacks?.onState('error');
     this.rejectConnect(new Error(message));
+  }
+
+  failUnsupported(): void {
+    this.callbacks?.onError(HOST_VERSION_UNSUPPORTED_MESSAGE);
+    this.rejectConnect(new HostVersionUnsupportedError('build-number-too-low', {
+      appVersion: '1.1.6',
+      buildNumber: 9,
+      protocolVersion: 3,
+    }));
   }
 
   emitState(state: TransportState): void {
@@ -141,6 +154,33 @@ describe('AppProvider connection lifecycle', () => {
       getTransport(transports, 0).open();
       await connectPromise;
     });
+  });
+
+  it('does not send hello or reconnect after an unsupported host version', async () => {
+    vi.useFakeTimers();
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect({ roomId: 'ABC123' }); });
+    await act(async () => {
+      getTransport(transports, 0).failUnsupported();
+      await connectPromise;
+    });
+
+    act(() => {
+      actions.retry();
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('pageshow'));
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+
+    expect(transports).toHaveLength(1);
+    expect(getTransport(transports, 0).send).not.toHaveBeenCalled();
   });
 
   it('ignores stale callbacks and cancels pending retry after a successful reconnect', async () => {
