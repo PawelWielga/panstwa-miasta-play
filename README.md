@@ -1,5 +1,7 @@
 # Państwa Miasta Play
 
+**[▶ Otwórz aplikację](https://pawelwielga.github.io/panstwa-miasta-play/)**
+
 Statyczny klient przeglądarkowy gry **Państwa Miasta**. Gracz dołącza z telefonu, tabletu lub komputera do rozgrywki hostowanej przez aplikację Android.
 
 ## Architektura
