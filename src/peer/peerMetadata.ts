@@ -1,6 +1,11 @@
-import { SUPPORTED_GAME_PROTOCOL_VERSION } from '../protocol/constants';
+import { PEER_JS_ONLINE_PROTOCOL_VERSION } from '../protocol/constants';
+import type { PeerJsOnlineJoinCredentials } from './onlineJoinCredentials';
 
-export interface PeerConnectionMetadata { room: string; protocol: number }
-export function createPeerMetadata(roomId: string): PeerConnectionMetadata {
-  return { room: roomId.trim().toUpperCase(), protocol: SUPPORTED_GAME_PROTOCOL_VERSION };
+export interface PeerConnectionMetadata { hostSessionId: string; protocol: number }
+
+export function createPeerMetadata(credentials: PeerJsOnlineJoinCredentials): PeerConnectionMetadata {
+  return {
+    hostSessionId: credentials.hostSessionId,
+    protocol: PEER_JS_ONLINE_PROTOCOL_VERSION,
+  };
 }

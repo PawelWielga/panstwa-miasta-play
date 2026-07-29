@@ -6,6 +6,8 @@ import {
   HostVersionUnsupportedError,
 } from '../config/hostCompatibility';
 import type { ClientMessage } from '../protocol/messages';
+import type { JoinParameters } from '../features/connection/joinParams';
+import { joinParameters } from '../test/fixtures';
 import type {
   GameTransport,
   TransportCallbacks,
@@ -16,7 +18,7 @@ import { AppProvider, useApp, type AppActions } from './AppContext';
 
 class DeferredTransport implements GameTransport {
   readonly connect = vi.fn((
-    _parameters: { roomId: string },
+    _parameters: JoinParameters,
     callbacks: TransportCallbacks,
     context?: TransportConnectContext,
   ): Promise<void> => {
@@ -56,7 +58,7 @@ class DeferredTransport implements GameTransport {
     this.rejectConnect(new HostVersionUnsupportedError('build-number-too-low', {
       appVersion: '1.1.6',
       buildNumber: 9,
-      protocolVersion: 3,
+      protocolVersion: 4,
     }));
   }
 
@@ -104,8 +106,8 @@ describe('AppProvider connection lifecycle', () => {
     let first!: Promise<void>;
     let second!: Promise<void>;
     act(() => {
-      first = actions.connect({ roomId: 'ABC123' });
-      second = actions.connect({ roomId: 'ABC123' });
+      first = actions.connect(joinParameters);
+      second = actions.connect(joinParameters);
     });
 
     expect(first).toBe(second);
@@ -141,7 +143,7 @@ describe('AppProvider connection lifecycle', () => {
 
     let connectPromise!: Promise<void>;
     act(() => {
-      connectPromise = actions.connect({ roomId: 'ABC123' });
+      connectPromise = actions.connect(joinParameters);
       actions.retry();
       window.dispatchEvent(new Event('online'));
       window.dispatchEvent(new Event('pageshow'));
@@ -166,7 +168,7 @@ describe('AppProvider connection lifecycle', () => {
     });
 
     let connectPromise!: Promise<void>;
-    act(() => { connectPromise = actions.connect({ roomId: 'ABC123' }); });
+    act(() => { connectPromise = actions.connect(joinParameters); });
     await act(async () => {
       getTransport(transports, 0).failUnsupported();
       await connectPromise;
@@ -193,7 +195,7 @@ describe('AppProvider connection lifecycle', () => {
     });
 
     let first!: Promise<void>;
-    act(() => { first = actions.connect({ roomId: 'ABC123' }); });
+    act(() => { first = actions.connect(joinParameters); });
     await act(async () => {
       getTransport(transports, 0).fail('first failed');
       await first;

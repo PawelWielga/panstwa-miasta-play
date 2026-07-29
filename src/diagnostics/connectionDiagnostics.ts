@@ -12,7 +12,17 @@ export interface ConnectionDiagnosticEntry {
 
 const STORAGE_KEY = 'pm.connection-diagnostics.v1';
 const MAX_ENTRIES = 80;
-const sensitiveDetailKeys = new Set(['reconnecttoken', 'playername', 'answers', 'payload', 'data']);
+const sensitiveDetailKeys = new Set([
+  'reconnecttoken',
+  'playername',
+  'answers',
+  'payload',
+  'data',
+  'onlinejoincode',
+  'hostproof',
+  'clientproof',
+  'nonce',
+]);
 const listeners = new Set<() => void>();
 let nextId = 1;
 let entries: readonly ConnectionDiagnosticEntry[] = readStoredEntries();

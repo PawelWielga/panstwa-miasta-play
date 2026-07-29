@@ -43,56 +43,37 @@ Testy PeerJS korzystają z interfejsu transportu i mocków. Nie łączą się z 
 
 ## Link zaproszenia
 
-Aplikacja Android generuje link zawierający wyłącznie kod pokoju:
+Aplikacja Android generuje pojedynczy kod sesji online i umieszcza go w linku:
 
 ```text
-https://gra.dihor.pl/?room=ABC123
+https://gra.dihor.pl/?code=PM4-ABC123-...-...&protocol=4
 ```
 
-Gracz podaje tylko swój nick i kod pokoju. Wersja protokołu jest ustawiona wewnętrznie w kodzie klienta, a identyfikator PeerJS hosta jest automatycznie wyliczany. Parametry techniczne nie są wymagane i nie są pokazywane w formularzu.
+Gracz podaje wyłącznie nick i cały kod. Formularz nie pokazuje Peer ID, wersji protokołu ani innych parametrów technicznych. Kod jest losowy i rotowany po każdym wyłączeniu i ponownym włączeniu gry online.
 
-Starszy parametr `peer` jest ignorowany. Starszy parametr `protocol` jest opcjonalny i służy wyłącznie do wykrycia niezgodnego linku.
+Starszy link `?room=ABC123` jest odrzucany czytelnym komunikatem. Klient nie wykonuje fallbacku do starego, przewidywalnego Peer ID.
 
-## Kontrakt PeerJS
+## Uwierzytelniony kontrakt PeerJS
 
-Klient tworzy tymczasowy `Peer` bez własnego identyfikatora i otwiera `DataConnection` do hosta wyliczonego z kodu pokoju:
+Peer ID jest wyprowadzany z SHA-256 całego kodu sesji. `DataConnection` używa etykiety `panstwa-miasta-game-v4` oraz metadata zawierającej tylko `hostSessionId` i wersję 4.
 
-```ts
-const roomId = normalizeRoomId(rawRoomId);
-const hostPeerId = buildPeerJsHostId(roomId);
+Po otwarciu kanału host i klient wykonują wzajemny handshake HMAC-SHA-256:
 
-peer.connect(hostPeerId, {
-  label: 'panstwa-miasta-game-v1',
-  reliable: true,
-  serialization: 'json',
-  metadata: {
-    room: roomId,
-    protocol: SUPPORTED_GAME_PROTOCOL_VERSION,
-  },
-});
-```
+1. host wysyła jednorazowy `bridge:challenge` z dowodem posiadania kodu,
+2. klient weryfikuje hosta i odsyła `bridge:authenticate`,
+3. host weryfikuje klienta i dopiero wtedy otwiera lokalny most do silnika gry,
+4. host wysyła `bridge:ready`,
+5. dopiero wtedy klient wysyła `player:hello` i ewentualny `client:rejoin`.
 
-Dla pokoju `ABC123` techniczny identyfikator hosta ma postać `panstwa-miasta-room-v3-abc123`. Jest to szczegół developerski i nie jest wyświetlany graczowi.
+Profil, `playerId` i `reconnectToken` nie są wysyłane przed potwierdzeniem hosta. Powtórzone lub spóźnione komunikaty handshake, zły HMAC, niezgodna sesja i timeout kończą próbę. Sekrety, nonce i pełne dowody są wykluczone z diagnostyki.
 
-Po otwarciu `DataConnection` klient czeka najpierw na transportowy komunikat `bridge:ready` z `appVersion`, liczbowym `buildNumber` i `protocolVersion`. Dopiero po zaakceptowaniu wersji hosta transport przechodzi do stanu `open` i wysyłany jest bezpośrednio obiekt `player:hello`. `bridge:ready` nie trafia do parsera wiadomości gry. Nie ma dodatkowej koperty `event/payload`. `reconnectToken` znajduje się tylko w hello i pamięci lokalnej. Nie jest częścią publicznego obiektu gracza.
-
-Każda mutacja otrzymuje nowy `requestId`. Przed wysłaniem aplikacja liczy rozmiar UTF-8 zserializowanej wiadomości i odrzuca obiekty większe niż 64 KiB.
-
+Pełny format kodu, kanoniczny tekst HMAC, limity i wspólne wektory testowe opisuje `docs/protocol-contract.md`.
 
 ## Zgodność wersji hosta
 
-Klient WWW obsługuje wyłącznie najnowszą świadomie wspieraną wersję aplikacji Android. Zgodność wsteczna ze starszym hostem nie jest gwarantowana. Host bez pełnych informacji o wersji, ze zbyt niskim `buildNumber` albo z inną wersją protokołu jest odrzucany przed `player:hello` i `client:rejoin`.
+Klient WWW wspiera kontrakt PeerJS v4 i minimalny build ustawiony w `src/config/hostCompatibility.ts`. Starszy host lub stary link są odrzucane przed przesłaniem danych gracza. Błąd uwierzytelnienia nie uruchamia automatycznego reconnectu, ponieważ wymaga nowego kodu od prowadzącego.
 
-Minimalny wspierany build i wymagana wersja protokołu są utrzymywane ręcznie w `src/config/hostCompatibility.ts`:
-
-```ts
-export const MIN_SUPPORTED_HOST_BUILD_NUMBER = 10;
-export const REQUIRED_HOST_PROTOCOL_VERSION = 3;
-```
-
-`buildNumber` odpowiada Androidowemu `versionCode`; tekstowe `appVersion` służy tylko diagnostyce. Zmiana minimum wymaga jednoczesnej aktualizacji testów i dokumentacji. Klient nie odpytuje Google Play ani zewnętrznego API.
-
-Przy błędzie `host-version-unsupported` połączenie jest zamykane, automatyczny reconnect nie jest uruchamiany, a użytkownik widzi komunikat wymagający aktualizacji aplikacji prowadzącego.
+Bezpieczna kolejność wdrożenia to najpierw klient WWW v4, a następnie host Android v4. Nie ma cichego downgrade'u. Tryb LAN/hotspot aplikacji Android pozostaje niezależny.
 
 ## Reconnect i Safari
 

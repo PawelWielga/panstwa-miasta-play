@@ -23,7 +23,7 @@ import {
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
 import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createSubmit } from '../protocol/outgoing';
 import type { ClientMessage, HostMessage } from '../protocol/messages';
-import { PeerJsGameTransport } from '../peer/PeerJsGameTransport';
+import { isPeerJsAuthenticationError, PeerJsGameTransport } from '../peer/PeerJsGameTransport';
 import { canAutoReconnect, reconnectDelay } from '../peer/reconnectPolicy';
 import type { GameTransport, TransportState } from '../peer/transport';
 import type { JoinParameters } from '../features/connection/joinParams';
@@ -299,7 +299,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
           attempt: current.attempt,
           ...getDiagnosticErrorDetails(error),
         });
-        shouldReconnect = !isHostVersionUnsupportedError(error);
+        shouldReconnect = !isHostVersionUnsupportedError(error) && !isPeerJsAuthenticationError(error);
       } finally {
         if (connectionAttemptRef.current.currentId === connectionAttemptId) {
           connectionAttemptRef.current.inFlight = null;

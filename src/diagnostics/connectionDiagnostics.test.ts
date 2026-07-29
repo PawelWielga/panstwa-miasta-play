@@ -23,6 +23,10 @@ describe('connectionDiagnostics', () => {
       reconnectToken: 'secret',
       playerName: 'Ala',
       answers: 'hidden',
+      onlineJoinCode: 'PM4-ABC123-secret',
+      hostProof: 'host-secret',
+      clientProof: 'client-secret',
+      nonce: 'nonce-secret',
     });
 
     expect(getConnectionDiagnostics()).toEqual([
