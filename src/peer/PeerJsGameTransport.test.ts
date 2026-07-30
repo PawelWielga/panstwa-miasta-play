@@ -7,7 +7,7 @@ import type { TransportCallbacks } from './transport';
 import { buildPeerJsHostId, createPeerJsProof } from './onlineJoinCredentials';
 
 type EventHandler = (value?: unknown) => void;
-const peerMock = vi.hoisted(() => ({ peers: [] as MockPeerShape[] }));
+const peerMock = vi.hoisted(() => ({ peers: [] as MockPeerShape[], options: [] as unknown[] }));
 interface MockConnectionShape {
   open: boolean;
   peer: string;
@@ -57,11 +57,16 @@ vi.mock('peerjs', () => {
     });
     reconnect = vi.fn();
     destroy = vi.fn(() => { this.destroyed = true; });
-    constructor() { super(); peerMock.peers.push(this); }
+    constructor(options?: unknown) { super(); peerMock.options.push(options); peerMock.peers.push(this); }
   } };
 });
 
-import { createPeerRtcConfiguration, PeerJsGameTransport } from './PeerJsGameTransport';
+import {
+  createPeerRtcConfiguration,
+  mapPeerError,
+  PEER_JS_STUN_SERVER_URL,
+  PeerJsGameTransport,
+} from './PeerJsGameTransport';
 const callbacks = (): TransportCallbacks => ({ onState: vi.fn(), onMessage: vi.fn(), onError: vi.fn() });
 const nonce = '00112233445566778899aabbccddeeff';
 
@@ -112,19 +117,35 @@ function emitReady(connection: MockConnectionShape): void {
 
 describe('PeerJsGameTransport authenticated contract', () => {
   beforeEach(() => {
-    clearConnectionDiagnostics(); peerMock.peers.length = 0;
+    clearConnectionDiagnostics(); peerMock.peers.length = 0; peerMock.options.length = 0;
     vi.spyOn(console, 'info').mockImplementation(() => undefined);
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-  it('keeps TURN relay fallbacks', () => {
-    expect(createPeerRtcConfiguration().iceServers).toHaveLength(2);
+  it('uses explicit STUN-only ICE without relay credentials', () => {
+    const config = createPeerRtcConfiguration();
+
+    expect(config.iceServers).toEqual([{ urls: PEER_JS_STUN_SERVER_URL }]);
+    for (const server of config.iceServers ?? []) {
+      const urls = typeof server.urls === 'string' ? [server.urls] : server.urls;
+      expect(urls).toEqual([PEER_JS_STUN_SERVER_URL]);
+      expect(urls.some((url) => /^turns?:/i.test(url))).toBe(false);
+      expect('username' in server).toBe(false);
+      expect('credential' in server).toBe(false);
+    }
+  });
+
+  it('explains when a network blocks direct WebRTC', () => {
+    expect(mapPeerError({ type: 'webrtc' })).toBe(
+      'Ta sieć blokuje bezpośrednie połączenie z telefonem prowadzącego. Spróbuj innej sieci Wi‑Fi lub komórkowej albo wyłącz VPN.',
+    );
   });
 
   it('derives an unpredictable host id and opens only after mutual authentication', async () => {
     const result = await openTransport();
+    expect(peerMock.options).toEqual([{ config: createPeerRtcConfiguration() }]);
     expect(result.peer.connect).toHaveBeenCalledWith('panstwa-miasta-room-v4-5965155548de8da8b74a1704f689c85e', {
       label: PEER_CONNECTION_LABEL, reliable: true, serialization: 'json',
       metadata: { hostSessionId: joinParameters.hostSessionId, protocol: PEER_JS_ONLINE_PROTOCOL_VERSION },

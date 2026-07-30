@@ -10,7 +10,7 @@ przeglądarka (React + PeerJS)
 telefon Android (host i źródło prawdy)
 ```
 
-Publiczny PeerJS Cloud służy wyłącznie do rejestracji identyfikatorów i sygnalizacji potrzebnej do zestawienia WebRTC. Po otwarciu DataChannel komunikaty gry są przesyłane bezpośrednio między urządzeniami. Repozytorium nie zawiera backendu, PeerServera, relaya WebSocket, bazy danych, Workera Cloudflare ani własnego TURN.
+Publiczny PeerJS Cloud służy wyłącznie do rejestracji identyfikatorów i sygnalizacji potrzebnej do zestawienia WebRTC. Po otwarciu DataChannel komunikaty gry są przesyłane bezpośrednio między urządzeniami. Klient przekazuje PeerJS jawną konfigurację STUN-only i nie używa publicznego ani własnego TURN, relaya WebSocket, backendu, bazy danych ani Workera Cloudflare.
 
 Host Android pozostaje autorytatywny dla faz gry, czasu, odpowiedzi, ocen i punktów. Klient WWW odtwarza ekran z `game:snapshot` i nie oblicza samodzielnie wyników.
 
@@ -171,4 +171,4 @@ Następnie:
 
 ## Ograniczenia P2P
 
-Projekt nie utrzymuje własnego TURN. Publiczny PeerJS Cloud realizuje sygnalizację, ale nie gwarantuje przejścia przez każdy NAT lub firewall. VPN, sieci firmowe, część sieci komórkowych i restrykcyjne routery mogą blokować bezpośredni WebRTC DataChannel. W takim przypadku warto zmienić sieć Wi-Fi lub wyłączyć VPN. Nie można zagwarantować działania w każdej sieci bez infrastruktury TURN.
+Projekt używa jawnej polityki ICE STUN-only i nie konfiguruje żadnego publicznego ani własnego TURN. Publiczny PeerJS Cloud realizuje wyłącznie sygnalizację. CGNAT, symetryczny NAT, VPN, sieci firmowe, szkolne, część sieci komórkowych, publiczne Wi-Fi i restrykcyjne routery mogą blokować bezpośredni WebRTC DataChannel. W takim przypadku klient pokazuje komunikat o blokadzie połączenia bezpośredniego; należy zmienić sieć lub wyłączyć VPN. Nie można zagwarantować działania online w każdej sieci bez kontrolowanej infrastruktury TURN.

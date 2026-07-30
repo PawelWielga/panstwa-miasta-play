@@ -34,20 +34,12 @@ import type { GameTransport, TransportCallbacks, TransportConnectContext } from 
 
 interface PeerRtcConfiguration extends RTCConfiguration { sdpSemantics?: 'unified-plan' }
 
+export const PEER_JS_STUN_SERVER_URL = 'stun:stun.l.google.com:19302';
 
 export function createPeerRtcConfiguration(): PeerRtcConfiguration {
   return {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      {
-        urls: [
-          'turn:eu-0.turn.peerjs.com:3478',
-          'turn:us-0.turn.peerjs.com:3478',
-        ],
-        username: 'peerjs',
-        credential: 'peerjsp',
-      },
-    ],
+    // Keep this explicit. Omitting config would restore PeerJS relay defaults.
+    iceServers: [{ urls: PEER_JS_STUN_SERVER_URL }],
     sdpSemantics: 'unified-plan',
   };
 }
@@ -589,7 +581,7 @@ export function mapPeerError(error: unknown): string {
     case 'peer-unavailable': return 'Brak aktywnego pokoju o podanym kodzie. Sprawdź kod albo poproś prowadzącego o utworzenie pokoju.';
     case 'invalid-id': return 'Kod pokoju jest nieprawidłowy.';
     case 'network': case 'socket-error': case 'socket-closed': return 'Nie udało się połączyć z usługą gry. Sprawdź internet i spróbuj ponownie.';
-    case 'webrtc': return 'Nie udało się połączyć z telefonem prowadzącego. Spróbuj innej sieci Wi‑Fi albo wyłącz VPN.';
+    case 'webrtc': return 'Ta sieć blokuje bezpośrednie połączenie z telefonem prowadzącego. Spróbuj innej sieci Wi‑Fi lub komórkowej albo wyłącz VPN.';
     case 'server-error': return 'Usługa połączeń jest chwilowo niedostępna.';
     default: return error instanceof Error && error.message === 'timeout'
       ? 'Telefon prowadzącego nie odpowiedział na czas. Sprawdź, czy aplikacja prowadzącego nadal działa, i spróbuj ponownie.'

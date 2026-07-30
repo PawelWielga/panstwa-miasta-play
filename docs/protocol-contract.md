@@ -46,6 +46,21 @@ peer.connect(hostPeerId, {
 
 Metadata nie zawiera sekretu. Samo dopasowanie Peer ID i metadata nie uwierzytelnia hosta, dlatego przed wiadomościami gry wykonywany jest wzajemny handshake HMAC.
 
+### Polityka ICE STUN-only
+
+Host Flutter i klient WWW przekazują PeerJS jawną, identyczną konfigurację ICE:
+
+```ts
+{
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  sdpSemantics: 'unified-plan',
+}
+```
+
+Konfiguracja nie zawiera `turn:`, `turns:`, `username` ani `credential`. Jawne przekazanie `iceServers` jest wymagane, aby nie odziedziczyć publicznych relayów z defaults biblioteki PeerJS. STUN służy wyłącznie do odkrycia kandydatów i nie pośredniczy w przesyłaniu komunikatów gry.
+
+Bez TURN połączenie nie jest gwarantowane przy CGNAT, symetrycznym NAT, VPN, restrykcyjnym firewallu, w części sieci firmowych, szkolnych, komórkowych i publicznych Wi-Fi. Błąd WebRTC jest prezentowany jako blokada bezpośredniego połączenia i nie uruchamia mniej bezpiecznego fallbacku relay.
+
 ### Uwierzytelniony handshake
 
 1. Po otwarciu `DataConnection` host generuje jednorazowy 128-bitowy nonce.
