@@ -2,6 +2,27 @@
 
 Dokument opisuje kontrakt używany przez klienta WWW. Źródłem prawdy pozostaje implementacja hosta Android z repozytorium `PawelWielga/panstwa-miasta` oraz typy w `src/protocol/messages.ts`.
 
+
+## Wersjonowane źródło kontraktu PeerJS
+
+Wartości transportu v4 używane przez runtime klienta WWW są zebrane w
+`src/peer/peerJsContract.ts`. Identyczny zestaw publicznych wektorów jest
+przechowywany w `src/test/fixtures/peerjs_contract_v4.json` oraz w repozytorium
+Android pod `test/fixtures/peerjs_contract_v4.json`.
+
+SHA-256 dokładnych bajtów bieżącego zestawu:
+
+```text
+511d759248509a097fe80f9c2d25d2bd4c1101bb3177454fedbd376d8afe1234
+```
+
+Testy Dart i TypeScript sprawdzają tę checksumę oraz wersję, label, metadata,
+canonicalizację i dowody HMAC, komunikaty bridge, politykę ICE i stabilne kody
+błędów. Nie wolno kopiować tych wartości do kolejnych modułów runtime.
+Zmiana znaczenia pola obowiązkowego, canonicalizacji, labelu lub HMAC wymaga
+nowej wersji transportu i nowego pliku wektorów. Nieznana wersja jest odrzucana
+bez cichego downgrade; nowe pola v4 mogą być dodawane tylko jako opcjonalne.
+
 ## Transport PeerJS v4
 
 Link zaproszenia zawiera jeden kod sesji online oraz jawną wersję kontraktu transportowego:

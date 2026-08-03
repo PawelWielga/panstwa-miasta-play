@@ -1,7 +1,10 @@
+export {
+  PEER_JS_GAME_CONNECTION_LABEL as PEER_CONNECTION_LABEL,
+  PEER_JS_MAX_MESSAGE_BYTES as MAX_MESSAGE_BYTES,
+  PEER_JS_ONLINE_PROTOCOL_VERSION,
+} from '../peer/peerJsContract';
+
 export const SUPPORTED_GAME_PROTOCOL_VERSION = 3;
-export const PEER_JS_ONLINE_PROTOCOL_VERSION = 4;
-export const PEER_CONNECTION_LABEL = 'panstwa-miasta-game-v4';
-export const MAX_MESSAGE_BYTES = 64 * 1024;
 export const PLAYER_NAME_MAX_LENGTH = 24;
 export const PLAYER_ID_MAX_LENGTH = 64;
 export const PLAYER_COLOR_MAX_LENGTH = 32;

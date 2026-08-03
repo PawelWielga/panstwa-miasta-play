@@ -1,11 +1,13 @@
-import { PEER_JS_ONLINE_PROTOCOL_VERSION } from '../protocol/constants';
 import type { PeerJsOnlineJoinCredentials } from './onlineJoinCredentials';
+import {
+  createPeerJsConnectionMetadata,
+  type PeerConnectionMetadata,
+} from './peerJsContract';
 
-export interface PeerConnectionMetadata { hostSessionId: string; protocol: number }
+export type { PeerConnectionMetadata } from './peerJsContract';
 
-export function createPeerMetadata(credentials: PeerJsOnlineJoinCredentials): PeerConnectionMetadata {
-  return {
-    hostSessionId: credentials.hostSessionId,
-    protocol: PEER_JS_ONLINE_PROTOCOL_VERSION,
-  };
+export function createPeerMetadata(
+  credentials: Pick<PeerJsOnlineJoinCredentials, 'hostSessionId'>,
+): PeerConnectionMetadata {
+  return createPeerJsConnectionMetadata(credentials);
 }

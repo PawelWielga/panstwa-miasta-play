@@ -1,19 +1,22 @@
-import { PEER_JS_ONLINE_PROTOCOL_VERSION, ROOM_CODE_PATTERN } from '../protocol/constants';
-
-const ONLINE_JOIN_CODE_PREFIX = `PM${String(PEER_JS_ONLINE_PROTOCOL_VERSION)}`;
-const FRIENDLY_BASE32_PATTERN = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]+$/;
-const HOST_SESSION_ID_LENGTH = 26;
-const ONLINE_SECRET_LENGTH = 20;
-const PEER_ID_HASH_HEX_LENGTH = 32;
-const HMAC_HEX_LENGTH = 64;
+import {
+  createPeerJsAuthenticationCanonicalValue,
+  PEER_JS_AUTHENTICATION_NONCE_HEX_LENGTH,
+  PEER_JS_AUTHENTICATION_PROOF_HEX_LENGTH,
+  PEER_JS_FRIENDLY_BASE32_PATTERN,
+  PEER_JS_HOST_ID_HASH_HEX_LENGTH,
+  PEER_JS_HOST_SESSION_ID_LENGTH,
+  PEER_JS_ONLINE_JOIN_CODE_PREFIX,
+  PEER_JS_ONLINE_PROTOCOL_VERSION,
+  PEER_JS_ONLINE_ROOM_ID_LENGTH,
+  PEER_JS_ONLINE_SECRET_LENGTH,
+  type PeerJsProofRole,
+} from './peerJsContract';
 
 export interface PeerJsOnlineJoinCredentials {
   roomId: string;
   hostSessionId: string;
   onlineJoinCode: string;
 }
-
-export type PeerJsProofRole = 'host' | 'client';
 
 export function normalizeOnlineJoinCode(rawCode: string): string {
   return rawCode.trim().toUpperCase();
@@ -24,19 +27,21 @@ export function parseOnlineJoinCode(rawCode: string): PeerJsOnlineJoinCredential
   if (!onlineJoinCode) throw new Error('Kod dołączenia nie może być pusty.');
 
   const parts = onlineJoinCode.split('-');
-  if (parts.length !== 4 || parts[0] !== ONLINE_JOIN_CODE_PREFIX) {
+  if (parts.length !== 4 || parts[0] !== PEER_JS_ONLINE_JOIN_CODE_PREFIX) {
     throw new Error('Kod dołączenia ma nieobsługiwany format. Poproś prowadzącego o nowy kod.');
   }
   const roomId = parts[1] ?? '';
   const hostSessionId = parts[2] ?? '';
   const secret = parts[3] ?? '';
-  if (!ROOM_CODE_PATTERN.test(roomId)) {
+  if (!new RegExp(`^[A-Z0-9]{${String(PEER_JS_ONLINE_ROOM_ID_LENGTH)}}$`).test(roomId)) {
     throw new Error('Kod dołączenia zawiera nieprawidłowy identyfikator pokoju.');
   }
-  if (hostSessionId.length !== HOST_SESSION_ID_LENGTH || !FRIENDLY_BASE32_PATTERN.test(hostSessionId)) {
+  if (hostSessionId.length !== PEER_JS_HOST_SESSION_ID_LENGTH
+    || !PEER_JS_FRIENDLY_BASE32_PATTERN.test(hostSessionId)) {
     throw new Error('Kod dołączenia zawiera nieprawidłową sesję hosta.');
   }
-  if (secret.length !== ONLINE_SECRET_LENGTH || !FRIENDLY_BASE32_PATTERN.test(secret)) {
+  if (secret.length !== PEER_JS_ONLINE_SECRET_LENGTH
+    || !PEER_JS_FRIENDLY_BASE32_PATTERN.test(secret)) {
     throw new Error('Kod dołączenia zawiera nieprawidłowy sekret.');
   }
   return { roomId, hostSessionId, onlineJoinCode };
@@ -53,7 +58,7 @@ export function validateOnlineJoinCredentials(credentials: PeerJsOnlineJoinCrede
 export async function buildPeerJsHostId(onlineJoinCode: string): Promise<string> {
   const normalizedCode = parseOnlineJoinCode(onlineJoinCode).onlineJoinCode;
   const digest = await crypto.subtle.digest('SHA-256', utf8(normalizedCode));
-  return `panstwa-miasta-room-v${String(PEER_JS_ONLINE_PROTOCOL_VERSION)}-${toHex(digest).slice(0, PEER_ID_HASH_HEX_LENGTH)}`;
+  return `panstwa-miasta-room-v${String(PEER_JS_ONLINE_PROTOCOL_VERSION)}-${toHex(digest).slice(0, PEER_JS_HOST_ID_HASH_HEX_LENGTH)}`;
 }
 
 export async function createPeerJsProof(
@@ -71,14 +76,12 @@ export async function createPeerJsProof(
     false,
     ['sign'],
   );
-  const canonical = [
-    'panstwa-miasta-peerjs-v4',
+  const canonical = createPeerJsAuthenticationCanonicalValue(
     role,
-    nonce.toLowerCase(),
+    nonce,
     credentials.hostSessionId,
     peerId,
-    String(PEER_JS_ONLINE_PROTOCOL_VERSION),
-  ].join('\n');
+  );
   return toHex(await crypto.subtle.sign('HMAC', key, utf8(canonical)));
 }
 
@@ -89,13 +92,13 @@ export async function verifyPeerJsProof(
   peerId: string,
   actualProof: string,
 ): Promise<boolean> {
-  if (!new RegExp(`^[0-9a-f]{${String(HMAC_HEX_LENGTH)}}$`).test(actualProof)) return false;
+  if (!new RegExp(`^[0-9a-f]{${String(PEER_JS_AUTHENTICATION_PROOF_HEX_LENGTH)}}$`).test(actualProof)) return false;
   const expectedProof = await createPeerJsProof(expectedRole, credentials, nonce, peerId);
   return constantTimeEqual(fromHex(expectedProof), fromHex(actualProof));
 }
 
 export function validateNonce(nonce: string): void {
-  if (!/^[0-9a-f]{32}$/.test(nonce)) throw new Error('Host wysłał nieprawidłowe wyzwanie uwierzytelniające.');
+  if (!new RegExp(`^[0-9a-f]{${String(PEER_JS_AUTHENTICATION_NONCE_HEX_LENGTH)}}$`).test(nonce)) throw new Error('Host wysłał nieprawidłowe wyzwanie uwierzytelniające.');
 }
 
 export function shortSessionId(hostSessionId: string): string {

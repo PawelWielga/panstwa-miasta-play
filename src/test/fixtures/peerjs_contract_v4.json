@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "contractId": "panstwa-miasta-peerjs-v4",
+  "protocolVersion": 4,
+  "joinCodePrefix": "PM4",
+  "connectionLabel": "panstwa-miasta-game-v4",
+  "authenticationContext": "panstwa-miasta-peerjs-v4",
+  "roomIdLength": 6,
+  "hostSessionIdLength": 26,
+  "onlineSecretLength": 20,
+  "nonceHexLength": 32,
+  "proofHexLength": 64,
+  "peerIdHashHexLength": 32,
+  "maxPeerIdLength": 128,
+  "maxMessageBytes": 65536,
+  "messageTypes": {
+    "challenge": "bridge:challenge",
+    "authenticate": "bridge:authenticate",
+    "ready": "bridge:ready"
+  },
+  "metadataKeys": {
+    "hostSessionId": "hostSessionId",
+    "protocol": "protocol"
+  },
+  "ice": {
+    "stunUrl": "stun:stun.l.google.com:19302",
+    "sdpSemantics": "unified-plan",
+    "turnAllowed": false
+  },
+  "credentials": {
+    "onlineJoinCode": "PM4-ABC123-ABCDEFGHJKLMNPQRSTUVWXYZ23-FGHJKLMNPQRSTUVWXYZ2",
+    "roomId": "ABC123",
+    "hostSessionId": "ABCDEFGHJKLMNPQRSTUVWXYZ23",
+    "peerId": "panstwa-miasta-room-v4-5965155548de8da8b74a1704f689c85e",
+    "nonce": "00112233445566778899aabbccddeeff",
+    "hostProof": "f2af71e0c49059d2a4e3d6ae6174fd7230444595d0b91f2646a7a5f2acea8444",
+    "clientProof": "d00558fdb53aa8d655e271340cc8982f5a4a7580ed5fa73f5fa509ffd674fe3a"
+  },
+  "metadata": {
+    "hostSessionId": "ABCDEFGHJKLMNPQRSTUVWXYZ23",
+    "protocol": 4
+  },
+  "challengeMessage": {
+    "type": "bridge:challenge",
+    "appVersion": "1.2.3",
+    "buildNumber": 123,
+    "protocolVersion": 4,
+    "hostSessionId": "ABCDEFGHJKLMNPQRSTUVWXYZ23",
+    "nonce": "00112233445566778899aabbccddeeff",
+    "peerId": "panstwa-miasta-room-v4-5965155548de8da8b74a1704f689c85e",
+    "hostProof": "f2af71e0c49059d2a4e3d6ae6174fd7230444595d0b91f2646a7a5f2acea8444"
+  },
+  "authenticateMessage": {
+    "type": "bridge:authenticate",
+    "protocolVersion": 4,
+    "hostSessionId": "ABCDEFGHJKLMNPQRSTUVWXYZ23",
+    "nonce": "00112233445566778899aabbccddeeff",
+    "clientProof": "d00558fdb53aa8d655e271340cc8982f5a4a7580ed5fa73f5fa509ffd674fe3a"
+  },
+  "readyMessage": {
+    "type": "bridge:ready",
+    "appVersion": "1.2.3",
+    "buildNumber": 123,
+    "protocolVersion": 4,
+    "hostSessionId": "ABCDEFGHJKLMNPQRSTUVWXYZ23"
+  },
+  "publicErrorCodes": {
+    "unsupportedProtocol": "unsupported-protocol-version",
+    "roomFull": "room-full",
+    "roomFullAliases": [
+      "room-full",
+      "room_full",
+      "too-many-players"
+    ],
+    "gameAlreadyStarted": "game-already-started",
+    "gameAlreadyStartedAliases": [
+      "game-already-started",
+      "game_already_started",
+      "game-in-progress"
+    ],
+    "authenticationFailed": "authentication-failed",
+    "authenticationAliases": [
+      "authentication-failed",
+      "invalid-reconnect-token",
+      "invalid_reconnect_credential"
+    ]
+  }
+}

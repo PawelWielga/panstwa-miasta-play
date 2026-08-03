@@ -1,10 +1,21 @@
 import type { HostVersionInfo } from '../config/hostCompatibility';
-import { PEER_JS_ONLINE_PROTOCOL_VERSION } from '../protocol/constants';
 import { validateNonce } from './onlineJoinCredentials';
+import {
+  createPeerJsBridgeAuthenticatePayload,
+  PEER_JS_AUTHENTICATION_PROOF_HEX_LENGTH,
+  PEER_JS_BRIDGE_AUTHENTICATE_MESSAGE_TYPE,
+  PEER_JS_BRIDGE_CHALLENGE_MESSAGE_TYPE,
+  PEER_JS_BRIDGE_READY_MESSAGE_TYPE,
+  PEER_JS_HOST_SESSION_ID_LENGTH,
+  PEER_JS_MAX_PEER_ID_LENGTH,
+  type PeerJsBridgeAuthenticatePayload,
+} from './peerJsContract';
 
-export const PEER_JS_BRIDGE_CHALLENGE_MESSAGE_TYPE = 'bridge:challenge';
-export const PEER_JS_BRIDGE_AUTHENTICATE_MESSAGE_TYPE = 'bridge:authenticate';
-export const PEER_JS_BRIDGE_READY_MESSAGE_TYPE = 'bridge:ready';
+export {
+  PEER_JS_BRIDGE_AUTHENTICATE_MESSAGE_TYPE,
+  PEER_JS_BRIDGE_CHALLENGE_MESSAGE_TYPE,
+  PEER_JS_BRIDGE_READY_MESSAGE_TYPE,
+} from './peerJsContract';
 
 export interface PeerJsBridgeChallengeMessage extends HostVersionInfo {
   type: typeof PEER_JS_BRIDGE_CHALLENGE_MESSAGE_TYPE;
@@ -14,13 +25,8 @@ export interface PeerJsBridgeChallengeMessage extends HostVersionInfo {
   hostProof: string;
 }
 
-export interface PeerJsBridgeAuthenticateMessage {
-  type: typeof PEER_JS_BRIDGE_AUTHENTICATE_MESSAGE_TYPE;
-  protocolVersion: number;
-  hostSessionId: string;
-  nonce: string;
-  clientProof: string;
-}
+export type PeerJsBridgeAuthenticateMessage =
+  PeerJsBridgeAuthenticatePayload;
 
 export interface PeerJsBridgeReadyMessage extends HostVersionInfo {
   type: typeof PEER_JS_BRIDGE_READY_MESSAGE_TYPE;
@@ -31,13 +37,11 @@ export function createPeerJsBridgeAuthenticateMessage(
   challenge: PeerJsBridgeChallengeMessage,
   clientProof: string,
 ): PeerJsBridgeAuthenticateMessage {
-  return {
-    type: PEER_JS_BRIDGE_AUTHENTICATE_MESSAGE_TYPE,
-    protocolVersion: PEER_JS_ONLINE_PROTOCOL_VERSION,
-    hostSessionId: challenge.hostSessionId,
-    nonce: challenge.nonce,
+  return createPeerJsBridgeAuthenticatePayload(
+    challenge.hostSessionId,
+    challenge.nonce,
     clientProof,
-  };
+  );
 }
 
 export function isPeerJsTransportMessage(value: unknown): boolean {
@@ -53,13 +57,15 @@ export function parsePeerJsBridgeChallengeMessage(value: unknown): PeerJsBridgeC
   const version = parseHostVersion(candidate);
   if (version === null
     || typeof candidate.hostSessionId !== 'string'
-    || !/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{26}$/.test(candidate.hostSessionId)
+    || !new RegExp(`^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{${String(PEER_JS_HOST_SESSION_ID_LENGTH)}}$`)
+      .test(candidate.hostSessionId)
     || typeof candidate.nonce !== 'string'
     || typeof candidate.peerId !== 'string'
     || candidate.peerId.length < 1
-    || candidate.peerId.length > 128
+    || candidate.peerId.length > PEER_JS_MAX_PEER_ID_LENGTH
     || typeof candidate.hostProof !== 'string'
-    || !/^[0-9a-f]{64}$/.test(candidate.hostProof)) return null;
+    || !new RegExp(`^[0-9a-f]{${String(PEER_JS_AUTHENTICATION_PROOF_HEX_LENGTH)}}$`)
+      .test(candidate.hostProof)) return null;
   try { validateNonce(candidate.nonce); } catch { return null; }
   return {
     type: PEER_JS_BRIDGE_CHALLENGE_MESSAGE_TYPE,
@@ -77,7 +83,8 @@ export function parsePeerJsBridgeReadyMessage(value: unknown): PeerJsBridgeReady
   const version = parseHostVersion(candidate);
   if (version === null
     || typeof candidate.hostSessionId !== 'string'
-    || !/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{26}$/.test(candidate.hostSessionId)) return null;
+    || !new RegExp(`^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{${String(PEER_JS_HOST_SESSION_ID_LENGTH)}}$`)
+      .test(candidate.hostSessionId)) return null;
   return {
     type: PEER_JS_BRIDGE_READY_MESSAGE_TYPE,
     ...version,

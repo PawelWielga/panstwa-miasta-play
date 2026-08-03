@@ -30,19 +30,11 @@ import {
   verifyPeerJsProof,
 } from './onlineJoinCredentials';
 import { createPeerMetadata } from './peerMetadata';
+import { createPeerRtcConfiguration } from './peerJsContract';
 import type { GameTransport, TransportCallbacks, TransportConnectContext } from './transport';
 
-interface PeerRtcConfiguration extends RTCConfiguration { sdpSemantics?: 'unified-plan' }
+export { createPeerRtcConfiguration, PEER_JS_STUN_SERVER_URL } from './peerJsContract';
 
-export const PEER_JS_STUN_SERVER_URL = 'stun:stun.l.google.com:19302';
-
-export function createPeerRtcConfiguration(): PeerRtcConfiguration {
-  return {
-    // Keep this explicit. Omitting config would restore PeerJS relay defaults.
-    iceServers: [{ urls: PEER_JS_STUN_SERVER_URL }],
-    sdpSemantics: 'unified-plan',
-  };
-}
 type DataConnectionDetails = {
   peer?: string;
   connectionId?: string;
