@@ -89,7 +89,7 @@ export function getConnectionFailureGuidance(error: string | null): ConnectionFa
   if (containsAny(message, ['pokój jest pełny', 'pokoj jest pelny', 'room_full', 'room full'])) return roomFull;
   if (containsAny(message, ['gra już się rozpoczęła', 'gra juz sie rozpoczela', 'game_already_started'])) return gameAlreadyStarted;
   if (containsAny(message, [
-    'kod pokoju jest nieprawidłowy', 'kod pokoju jest nieprawidlowy', 'niepoprawne dane',
+    'kod pokoju jest nieprawidłowy', 'kod pokoju jest nieprawidlowy',
     'nie udało się potwierdzić', 'nie udalo sie potwierdzic', 'nowy kod dołączenia', 'nowy kod dolaczenia',
     'nieprawidłowy kod', 'nieprawidlowy kod', 'invalid-id',
   ])) return invalidInvitation;
