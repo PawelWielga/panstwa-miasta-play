@@ -7,9 +7,11 @@ describe('buildPeerJsHostId', () => {
     await expect(buildPeerJsHostId(testOnlineJoinCode)).resolves.toBe('panstwa-miasta-room-v4-5965155548de8da8b74a1704f689c85e');
   });
 
-  it('normalizes case and rejects malformed codes', async () => {
+  it('normalizes case, accepts six-character room codes and rejects malformed codes', async () => {
     await expect(buildPeerJsHostId(joinParameters.onlineJoinCode.toLowerCase()))
       .resolves.toBe('panstwa-miasta-room-v4-5965155548de8da8b74a1704f689c85e');
-    await expect(buildPeerJsHostId('ABC123')).rejects.toThrow('nieobsługiwany format');
+    await expect(buildPeerJsHostId('abc234'))
+      .resolves.toBe('panstwa-miasta-room-v4-d7fee74e05cf19a0c1b97b4486a7b738');
+    await expect(buildPeerJsHostId('ABC23')).rejects.toThrow('nieobsługiwany format');
   });
 });
