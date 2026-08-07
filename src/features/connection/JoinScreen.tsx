@@ -23,7 +23,10 @@ export function JoinScreen({ search }: { search?: string }) {
   const rawRoomId = searchParams.get('room') ?? '';
   const rawOnlineJoinCode = searchParams.get('code') ?? '';
   const onlineJoinDisabled = searchParams.get('online')?.trim().toLowerCase() === 'disabled';
-  const [onlineJoinCode, setOnlineJoinCode] = useState(parsed.value?.onlineJoinCode ?? normalizeOnlineJoinCode(rawOnlineJoinCode));
+  const [onlineJoinCode, setOnlineJoinCode] = useState(
+    parsed.value?.roomId ?? normalizeOnlineJoinCode(rawOnlineJoinCode),
+  );
+  const [joinCodeDirty, setJoinCodeDirty] = useState(false);
   const [name, setName] = useState(state.identity.playerName);
   const [errors, setErrors] = useState<Partial<Record<FormErrorKey, string>>>({});
 
@@ -40,7 +43,9 @@ export function JoinScreen({ search }: { search?: string }) {
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
-    const credentials = parseOnlineJoinCode(onlineJoinCode);
+    const credentials = !joinCodeDirty && parsed.value
+      ? parsed.value
+      : parseOnlineJoinCode(onlineJoinCode);
     if (usesWindowLocation) {
       window.history.replaceState(
         window.history.state,
@@ -58,13 +63,16 @@ export function JoinScreen({ search }: { search?: string }) {
 
   const protocolError = errors.protocol ?? parsed.errors.protocol;
   return <Layout><Card className="join-card">
-    <div className="hero"><span className="eyebrow">Dołącz do rozgrywki</span><h1>Gotowy na rundę?</h1><p>Wpisz swój nick i kod dołączenia wyświetlony przez prowadzącego.</p></div>
+    <div className="hero"><span className="eyebrow">Dołącz do rozgrywki</span><h1>Gotowy na rundę?</h1><p>Wpisz swój nick i 6-znakowy kod pokoju wyświetlony przez prowadzącego.</p></div>
     {parsed.fromInvitation && parsed.value ? <div className="invite-status success"><span>✓</span><div><strong>Zaproszenie jest poprawne</strong><small>Pokój <b>{parsed.value.roomId}</b></small></div></div> : null}
     {protocolError ? <div className="invite-status warning" role="alert"><span>!</span><div><strong>Nie można użyć tego linku</strong><small>{protocolError}</small></div></div> : null}
     <form onSubmit={submit} noValidate>
       <label>Twój nick<input autoFocus name="playerName" autoComplete="nickname" maxLength={PLAYER_NAME_MAX_LENGTH} value={name} onChange={(event) => setName(event.target.value)} aria-invalid={Boolean(errors.name)} /></label>
       {errors.name ? <p className="field-error">{errors.name}</p> : null}
-      <label>Kod dołączenia<input name="onlineJoinCode" value={onlineJoinCode} maxLength={64} autoCapitalize="characters" autoComplete="off" onChange={(event) => setOnlineJoinCode(event.target.value.toUpperCase())} aria-invalid={Boolean(errors.code)} /></label>
+      <label>Kod pokoju (6 znaków)<input name="onlineJoinCode" value={onlineJoinCode} maxLength={6} placeholder="ABC234" autoCapitalize="characters" autoComplete="off" spellCheck={false} onChange={(event) => {
+        setJoinCodeDirty(true);
+        setOnlineJoinCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6));
+      }} aria-invalid={Boolean(errors.code)} /></label>
       {(errors.code ?? parsed.errors.code) ? <p className="field-error">{errors.code ?? parsed.errors.code}</p> : null}
       <button className="button button-primary button-large" type="submit">Dołącz do gry</button>
     </form>

@@ -18,6 +18,8 @@ export interface PeerJsOnlineJoinCredentials {
   onlineJoinCode: string;
 }
 
+const shortOnlineJoinCodePattern = /^[A-Z0-9]{6}$/;
+
 export function normalizeOnlineJoinCode(rawCode: string): string {
   return rawCode.trim().toUpperCase();
 }
@@ -25,6 +27,10 @@ export function normalizeOnlineJoinCode(rawCode: string): string {
 export function parseOnlineJoinCode(rawCode: string): PeerJsOnlineJoinCredentials {
   const onlineJoinCode = normalizeOnlineJoinCode(rawCode);
   if (!onlineJoinCode) throw new Error('Kod dołączenia nie może być pusty.');
+
+  if (shortOnlineJoinCodePattern.test(onlineJoinCode)) {
+    return deriveOnlineJoinCredentials(onlineJoinCode);
+  }
 
   const parts = onlineJoinCode.split('-');
   if (parts.length !== 4 || parts[0] !== PEER_JS_ONLINE_JOIN_CODE_PREFIX) {
@@ -103,6 +109,36 @@ export function validateNonce(nonce: string): void {
 
 export function shortSessionId(hostSessionId: string): string {
   return hostSessionId.length <= 8 ? hostSessionId : `${hostSessionId.slice(0, 8)}…`;
+}
+
+function deriveOnlineJoinCredentials(roomId: string): PeerJsOnlineJoinCredentials {
+  const normalizedRoomId = normalizeOnlineJoinCode(roomId);
+  if (!shortOnlineJoinCodePattern.test(normalizedRoomId)) {
+    throw new Error('Kod pokoju musi mieć dokładnie 6 liter lub cyfr.');
+  }
+
+  const friendlySeed = normalizedRoomId
+    .replaceAll('0', '2')
+    .replaceAll('1', '3')
+    .replaceAll('I', 'J')
+    .replaceAll('O', 'P');
+  const hostSessionId = repeatToLength(friendlySeed, PEER_JS_HOST_SESSION_ID_LENGTH);
+  const secret = repeatToLength(
+    [...friendlySeed].reverse().join(''),
+    PEER_JS_ONLINE_SECRET_LENGTH,
+  );
+  const onlineJoinCode = [
+    PEER_JS_ONLINE_JOIN_CODE_PREFIX,
+    normalizedRoomId,
+    hostSessionId,
+    secret,
+  ].join('-');
+
+  return { roomId: normalizedRoomId, hostSessionId, onlineJoinCode };
+}
+
+function repeatToLength(value: string, length: number): string {
+  return value.repeat(Math.ceil(length / value.length)).slice(0, length);
 }
 
 function utf8(value: string): Uint8Array<ArrayBuffer> {
