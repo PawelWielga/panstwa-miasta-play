@@ -14,4 +14,17 @@ describe('player identity storage', () => {
     expect(storedValue).toBeDefined();
     expect(JSON.parse(storedValue ?? '{}')).not.toHaveProperty('profile');
   });
+
+  it('falls back to an ephemeral identity when storage is unavailable', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce('33333333-3333-4333-8333-333333333333').mockReturnValueOnce('44444444-4444-4444-8444-444444444444');
+    const identity = loadPlayerIdentity(null);
+    expect(identity.playerId).toBe('33333333-3333-4333-8333-333333333333');
+    expect(identity.reconnectToken).toBe('44444444444444448444444444444444');
+  });
+
+  it('does not fail when browser storage rejects writes', () => {
+    const identity = createPlayerIdentity({ playerName: 'Ala' });
+    const storage = { setItem: () => { throw new DOMException('Blocked', 'SecurityError'); } };
+    expect(() => savePlayerIdentity(identity, storage)).not.toThrow();
+  });
 });
