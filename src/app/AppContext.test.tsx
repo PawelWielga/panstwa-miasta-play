@@ -5,7 +5,7 @@ import {
   HOST_VERSION_UNSUPPORTED_MESSAGE,
   HostVersionUnsupportedError,
 } from '../config/hostCompatibility';
-import type { ClientMessage } from '../protocol/messages';
+import type { ClientMessage, HostMessage } from '../protocol/messages';
 import type { JoinParameters } from '../features/connection/joinParams';
 import { joinParameters } from '../test/fixtures';
 import type {
@@ -14,6 +14,7 @@ import type {
   TransportConnectContext,
   TransportState,
 } from '../peer/transport';
+import type { AppState } from '../state/gameStore';
 import { AppProvider, useApp, type AppActions } from './AppContext';
 
 class DeferredTransport implements GameTransport {
@@ -65,12 +66,18 @@ class DeferredTransport implements GameTransport {
   emitState(state: TransportState): void {
     this.callbacks?.onState(state);
   }
+
+  emitMessage(message: HostMessage): void {
+    this.callbacks?.onMessage(message);
+  }
 }
 
 let actions: AppActions;
+let currentState: AppState;
 function Harness({ onActions }: { onActions: (value: AppActions) => void }) {
-  const currentActions = useApp().actions;
-  useEffect(() => onActions(currentActions), [currentActions, onActions]);
+  const current = useApp();
+  useEffect(() => onActions(current.actions), [current.actions, onActions]);
+  useEffect(() => { currentState = current.state; }, [current.state]);
   return null;
 }
 
@@ -183,6 +190,39 @@ describe('AppProvider connection lifecycle', () => {
 
     expect(transports).toHaveLength(1);
     expect(getTransport(transports, 0).send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['room_full', 'Pokój jest pełny. Host ustawił limit graczy dla tej rozgrywki.'],
+    ['game_already_started', 'Gra już się rozpoczęła. Poproś hosta o nowy pokój albo spróbuj później.'],
+  ])('stops reconnect after terminal join rejection %s', async (code, message) => {
+    vi.useFakeTimers();
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+
+    act(() => {
+      getTransport(transports, 0).emitMessage({ type: 'game:error', code, message });
+      getTransport(transports, 0).emitState('closed');
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('pageshow'));
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+
+    expect(currentState.connectionStatus).toBe('error');
+    expect(currentState.connectionError).toBe(message);
+    expect(getTransport(transports, 0).close).toHaveBeenCalled();
+    expect(transports).toHaveLength(1);
   });
 
   it('ignores stale callbacks and cancels pending retry after a successful reconnect', async () => {
