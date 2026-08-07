@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPlayerIdentity, loadPlayerIdentity, playerIdentityStorageKey, savePlayerIdentity } from './playerIdentityStorage';
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('player identity storage', () => {
   it('stores public profile and private reconnect identity separately', () => {
