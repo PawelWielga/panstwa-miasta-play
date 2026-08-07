@@ -1,7 +1,12 @@
-import type { HostMessage } from './messages';
+import type { GameErrorMessage, HostMessage } from './messages';
 
-const terminalJoinErrorCodes = new Set(['room_full', 'game_already_started']);
+type TerminalJoinErrorCode = 'room_full' | 'game_already_started';
+type TerminalJoinErrorMessage = GameErrorMessage & { code: TerminalJoinErrorCode };
 
-export function isTerminalJoinError(message: HostMessage): boolean {
-  return message.type === 'game:error' && terminalJoinErrorCodes.has(message.code);
+const terminalJoinErrorCodes = new Set<TerminalJoinErrorCode>(['room_full', 'game_already_started']);
+
+export function isTerminalJoinError(message: HostMessage): message is TerminalJoinErrorMessage {
+  return message.type === 'game:error'
+    && message.code !== undefined
+    && terminalJoinErrorCodes.has(message.code as TerminalJoinErrorCode);
 }
