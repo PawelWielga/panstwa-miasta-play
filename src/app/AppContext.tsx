@@ -21,6 +21,7 @@ import {
   isHostVersionUnsupportedError,
 } from '../config/hostCompatibility';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
+import { isTerminalJoinError } from '../protocol/gameErrors';
 import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createSubmit } from '../protocol/outgoing';
 import type { ClientMessage, HostMessage } from '../protocol/messages';
 import { isPeerJsAuthenticationError, PeerJsGameTransport } from '../peer/PeerJsGameTransport';
@@ -51,7 +52,14 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
   const [state, dispatch] = useReducer(gameReducer, createInitialState(initialIdentity, null));
   const stateRef = useRef(state);
   const transportRef = useRef<GameTransport | null>(null);
-  const reconnectRef = useRef({ startedAt: 0, attempt: 0, timer: 0, manuallyClosed: false, everConnected: false });
+  const reconnectRef = useRef({
+    startedAt: 0,
+    attempt: 0,
+    timer: 0,
+    manuallyClosed: false,
+    everConnected: false,
+    terminalJoinRejected: false,
+  });
   const connectionAttemptRef = useRef({
     sequence: 0,
     currentId: null as string | null,
@@ -85,12 +93,24 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     if (message.type !== 'host:heartbeat') {
       recordConnectionDiagnostic('host-message.received', 'info', hostMessageDiagnosticDetails(message));
     }
+    if (isTerminalJoinError(message)) {
+      const current = reconnectRef.current;
+      current.terminalJoinRejected = true;
+      window.clearTimeout(current.timer);
+      current.timer = 0;
+      recordConnectionDiagnostic('join.rejected', 'warning', { code: message.code });
+      transportRef.current?.close();
+    }
     dispatch({ type: 'host-message', message, receivedAt: Date.now() });
   }, []);
 
   const scheduleReconnect = useCallback((): void => {
     const current = reconnectRef.current;
     const parameters = stateRef.current.joinParameters;
+    if (current.terminalJoinRejected) {
+      recordConnectionDiagnostic('reconnect.skipped', 'info', { reason: 'terminal-join-rejection' });
+      return;
+    }
     if (stateRef.current.connectionError === HOST_VERSION_UNSUPPORTED_MESSAGE) {
       recordConnectionDiagnostic('reconnect.skipped', 'info', { reason: 'host-version-unsupported' });
       return;
@@ -141,9 +161,13 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     dispatch({ type: 'connection', status: 'reconnecting' });
     current.timer = window.setTimeout(() => {
       current.timer = 0;
-      if (current.manuallyClosed || connectionAttemptRef.current.inFlight !== null) {
+      if (current.manuallyClosed || current.terminalJoinRejected || connectionAttemptRef.current.inFlight !== null) {
         recordConnectionDiagnostic('reconnect.timer.cancelled', 'info', {
-          reason: current.manuallyClosed ? 'manually-closed' : 'connection-attempt-in-flight',
+          reason: current.manuallyClosed
+            ? 'manually-closed'
+            : current.terminalJoinRejected
+              ? 'terminal-join-rejection'
+              : 'connection-attempt-in-flight',
         });
         return;
       }
@@ -197,7 +221,8 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     const isCurrentAttempt = (): boolean =>
       connectionAttemptRef.current.currentId === connectionAttemptId
       && transportRef.current === transport
-      && !reconnectRef.current.manuallyClosed;
+      && !reconnectRef.current.manuallyClosed
+      && !reconnectRef.current.terminalJoinRejected;
 
     let handshakeSent = false;
     const sendInitialHandshake = (): void => {
@@ -333,6 +358,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     current.timer = 0;
     current.manuallyClosed = false;
     current.everConnected = false;
+    current.terminalJoinRejected = false;
     connectionAttemptRef.current.currentId = null;
     transportRef.current?.close();
     transportRef.current = null;
@@ -345,6 +371,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     });
     const current = reconnectRef.current;
     current.manuallyClosed = true;
+    current.terminalJoinRejected = false;
     window.clearTimeout(current.timer);
     current.timer = 0;
     connectionAttemptRef.current.currentId = null;
@@ -357,6 +384,10 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
 
   const retry = useCallback((): void => {
     const parameters = stateRef.current.joinParameters;
+    if (reconnectRef.current.terminalJoinRejected) {
+      recordConnectionDiagnostic('connection.retry.skipped', 'info', { reason: 'terminal-join-rejection' });
+      return;
+    }
     if (stateRef.current.connectionError === HOST_VERSION_UNSUPPORTED_MESSAGE) {
       recordConnectionDiagnostic('connection.retry.skipped', 'info', { reason: 'host-version-unsupported' });
       return;
