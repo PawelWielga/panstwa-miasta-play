@@ -124,7 +124,7 @@ function deriveOnlineJoinCredentials(roomId: string): PeerJsOnlineJoinCredential
     .replaceAll('O', 'P');
   const hostSessionId = repeatToLength(friendlySeed, PEER_JS_HOST_SESSION_ID_LENGTH);
   const secret = repeatToLength(
-    [...friendlySeed].reverse().join(''),
+    reverseAscii(friendlySeed),
     PEER_JS_ONLINE_SECRET_LENGTH,
   );
   const onlineJoinCode = [
@@ -135,6 +135,14 @@ function deriveOnlineJoinCredentials(roomId: string): PeerJsOnlineJoinCredential
   ].join('-');
 
   return { roomId: normalizedRoomId, hostSessionId, onlineJoinCode };
+}
+
+function reverseAscii(value: string): string {
+  let result = '';
+  for (let index = value.length - 1; index >= 0; index -= 1) {
+    result += value[index] ?? '';
+  }
+  return result;
 }
 
 function repeatToLength(value: string, length: number): string {
