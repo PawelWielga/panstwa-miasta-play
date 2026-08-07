@@ -1,4 +1,5 @@
 import type { JoinParameters } from '../features/connection/joinParams';
+import { isTerminalJoinError } from '../protocol/gameErrors';
 import type {
   CountriesCitiesAnswerResult, CountriesCitiesSettings, CountriesCitiesSubmission,
   GameCategory, GameSnapshot, HostMessage, PlayerProfile,
@@ -70,7 +71,9 @@ function reduceHostMessage(state: AppState, message: HostMessage, receivedAt: nu
   const active = { ...state, lastHostActivityAt: receivedAt };
   switch (message.type) {
     case 'room:players': return { ...active, players: message.players };
-    case 'game:error': return { ...active, connectionError: message.message, notice: message.message };
+    case 'game:error': return isTerminalJoinError(message)
+      ? { ...active, connectionStatus: 'error', connectionError: message.message, notice: null }
+      : { ...active, connectionError: message.message, notice: message.message };
     case 'host:heartbeat': return { ...active, gameId: message.gameId, lastSeenSequenceNumber: Math.max(state.lastSeenSequenceNumber, message.sequenceNumber) };
     case 'game:snapshot': return applySnapshot(active, message.snapshot);
     case 'host:migrated': return { ...applySnapshot(active, message.snapshot), notice: 'Host gry został zmieniony.' };
