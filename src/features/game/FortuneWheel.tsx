@@ -24,7 +24,7 @@ export function FortuneWheel({ wheelState, usedLetters = [], now = Date.now }: F
       .map((letter) => letter.trim().toUpperCase())
       .filter((letter) => segments.includes(letter as (typeof segments)[number]))
       .filter((letter) => letter !== hiddenTarget),
-  ), [hiddenTarget, segments, usedLetters]);
+  ), [hiddenTarget, usedLetters]);
   const revealedLetter = wheelState.phase === 'finished' ? wheelState.letter : undefined;
   const animationTime = reducedMotion && wheelState.phase === 'spinning'
     ? wheelState.spinStartedAt ?? currentTime
@@ -43,7 +43,7 @@ export function FortuneWheel({ wheelState, usedLetters = [], now = Date.now }: F
       <div className="fortune-wheel-stage">
         <div className="fortune-wheel-pointer" aria-hidden="true" />
         <svg className="fortune-wheel-surface" viewBox="0 0 320 320" aria-hidden="true">
-          <g className="fortune-wheel-rotor" style={{ transform: `rotate(${rotationDegrees}deg)` }}>
+          <g className="fortune-wheel-rotor" style={{ transform: `rotate(${String(rotationDegrees)}deg)` }}>
             {segments.map((letter, index) => {
               const used = normalizedUsedLetters.has(letter);
               const revealed = revealedLetter === letter;
@@ -58,7 +58,7 @@ export function FortuneWheel({ wheelState, usedLetters = [], now = Date.now }: F
                     x={geometry.labelX}
                     y={geometry.labelY}
                     className={`fortune-wheel-label${used ? ' is-used' : ''}${revealed ? ' is-revealed' : ''}`}
-                    transform={`rotate(${geometry.labelRotation} ${geometry.labelX} ${geometry.labelY})`}
+                    transform={['rotate(', geometry.labelRotation, ' ', geometry.labelX, ' ', geometry.labelY, ')'].map(String).join('')}
                   >
                     {letter}
                   </text>
@@ -85,29 +85,31 @@ function useWheelClock(
     setCurrentTime(now());
     if (wheelState.phase !== 'spinning' || reducedMotion) return undefined;
 
-    let frame = 0;
+    let frame: number | null = null;
+    const schedule = (): void => {
+      if (frame === null) frame = window.requestAnimationFrame(update);
+    };
     const update = (): void => {
+      frame = null;
       const timestamp = now();
       setCurrentTime(timestamp);
-      if (wheelSpinProgress(wheelState, timestamp) < 1) frame = window.requestAnimationFrame(update);
+      if (wheelSpinProgress(wheelState, timestamp) < 1) schedule();
     };
-    frame = window.requestAnimationFrame(update);
+    schedule();
 
     const handleVisibility = (): void => {
       if (document.visibilityState !== 'visible') return;
       const timestamp = now();
       setCurrentTime(timestamp);
-      if (wheelSpinProgress(wheelState, timestamp) < 1 && frame === 0) {
-        frame = window.requestAnimationFrame(update);
-      }
+      if (wheelSpinProgress(wheelState, timestamp) < 1) schedule();
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      window.cancelAnimationFrame(frame);
+      if (frame !== null) window.cancelAnimationFrame(frame);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [now, reducedMotion, wheelState.phase, wheelState.spinDurationMs, wheelState.spinId, wheelState.spinStartedAt]);
+  }, [now, reducedMotion, wheelState]);
 
   return currentTime;
 }
@@ -119,8 +121,8 @@ function useReducedMotion(): boolean {
     const query = window.matchMedia('(prefers-reduced-motion: reduce)');
     const update = (): void => setReducedMotion(query.matches);
     update();
-    query.addEventListener?.('change', update);
-    return () => query.removeEventListener?.('change', update);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
   }, []);
   return reducedMotion;
 }
@@ -145,7 +147,9 @@ function segmentGeometry(index: number, segmentCount: number): {
   const start = polarPoint(center, center, radius, startAngle);
   const end = polarPoint(center, center, radius, endAngle);
   const label = polarPoint(center, center, labelRadius, middleAngle);
-  const path = `M ${center} ${center} L ${start.x} ${start.y} A ${radius} ${radius} 0 0 1 ${end.x} ${end.y} Z`;
+  const path = ['M', center, center, 'L', start.x, start.y, 'A', radius, radius, 0, 0, 1, end.x, end.y, 'Z']
+    .map(String)
+    .join(' ');
   return {
     path,
     labelX: label.x,
