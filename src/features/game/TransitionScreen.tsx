@@ -124,12 +124,12 @@ function wheelStatus(
         title: 'Twoja kolej',
         description: requestPending
           ? 'Wysłano prośbę. Koło ruszy po potwierdzeniu hosta.'
-          : `Naciśnij „Zakręć kołem”. Jeśli nie zdążysz, host uruchomi je automatycznie za ${remainingSeconds} s.`,
+          : `Naciśnij „Zakręć kołem”. Jeśli nie zdążysz, host uruchomi je automatycznie za ${String(remainingSeconds)} s.`,
       };
     }
     return {
       title: `Teraz kręci ${selectedPlayerName}`,
-      description: `Koło ruszy po akcji gracza albo automatycznie za ${remainingSeconds} s.`,
+      description: `Koło ruszy po akcji gracza albo automatycznie za ${String(remainingSeconds)} s.`,
     };
   }
   if (wheelState.phase === 'spinning') {
