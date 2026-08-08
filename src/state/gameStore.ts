@@ -37,6 +37,7 @@ export interface AppState {
 export type AppAction =
   | { type: 'identity'; identity: PlayerIdentity }
   | { type: 'join-parameters'; parameters: JoinParameters }
+  | { type: 'resume-session'; identity: PlayerIdentity; parameters: JoinParameters; lastSeenSequenceNumber: number }
   | { type: 'connection'; status: ConnectionStatus; error?: string | null }
   | { type: 'host-message'; message: HostMessage; receivedAt: number }
   | { type: 'answer'; categoryId: string; value: string }
@@ -58,6 +59,10 @@ export function gameReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'identity': return { ...state, identity: action.identity };
     case 'join-parameters': return { ...state, joinParameters: action.parameters };
+    case 'resume-session': return {
+      ...createInitialState(action.identity, action.parameters),
+      lastSeenSequenceNumber: action.lastSeenSequenceNumber,
+    };
     case 'connection': return { ...state, connectionStatus: action.status, connectionError: action.error ?? null };
     case 'answer': return { ...state, answers: { ...state.answers, [action.categoryId]: action.value } };
     case 'submitted': return { ...state, answersSubmitted: action.value };
