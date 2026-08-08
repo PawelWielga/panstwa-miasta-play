@@ -82,7 +82,6 @@ function useWheelClock(
   const [currentTime, setCurrentTime] = useState(() => now());
 
   useEffect(() => {
-    setCurrentTime(now());
     if (wheelState.phase !== 'spinning' || reducedMotion) return undefined;
 
     let frame: number | null = null;
