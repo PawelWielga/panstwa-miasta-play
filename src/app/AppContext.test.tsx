@@ -220,7 +220,6 @@ describe('AppProvider connection lifecycle', () => {
       expect.objectContaining({
         type: 'player:hello',
         reconnectToken: 'restored-token',
-        player: expect.objectContaining({ id: 'restored-player' }),
       }),
     );
     expect(getTransport(transports, 0).send).toHaveBeenNthCalledWith(
@@ -228,9 +227,15 @@ describe('AppProvider connection lifecycle', () => {
       expect.objectContaining({
         type: 'client:rejoin',
         lastSeenSequenceNumber: 9,
-        player: expect.objectContaining({ id: 'restored-player' }),
       }),
     );
+    const hello = getTransport(transports, 0).send.mock.calls[0]?.[0];
+    const rejoin = getTransport(transports, 0).send.mock.calls[1]?.[0];
+    if (hello?.type !== 'player:hello' || rejoin?.type !== 'client:rejoin') {
+      throw new Error('Expected resume handshake messages.');
+    }
+    expect(hello.player.id).toBe('restored-player');
+    expect(rejoin.player.id).toBe('restored-player');
     expect(currentState.identity.playerId).toBe('restored-player');
     expect(currentState.lastSeenSequenceNumber).toBe(9);
   });
