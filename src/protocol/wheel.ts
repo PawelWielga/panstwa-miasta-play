@@ -59,6 +59,10 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
   };
 }
 
+export function wheelSpinRequestKey(state: CountriesCitiesWheelState): string {
+  return JSON.stringify([state.hostSessionId, state.roundNumber, state.spinId]);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
