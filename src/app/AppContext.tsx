@@ -30,10 +30,17 @@ import type { GameTransport, TransportState } from '../peer/transport';
 import type { JoinParameters } from '../features/connection/joinParams';
 import { createInitialState, gameReducer, type AppState } from '../state/gameStore';
 import { loadPlayerIdentity, savePlayerIdentity, updatePlayerIdentity, type PlayerIdentity, type StoredPlayerIdentity } from '../storage/playerIdentityStorage';
+import {
+  removeUnfinishedMultiplayerSession,
+  saveUnfinishedMultiplayerSession,
+  type UnfinishedMultiplayerSession,
+} from '../storage/unfinishedMultiplayerSessionStorage';
+
+const UNFINISHED_SESSION_REFRESH_INTERVAL_MS = 60_000;
 
 export interface AppActions {
   updateIdentity: (values: Pick<StoredPlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>) => PlayerIdentity;
-  connect: (parameters: JoinParameters) => Promise<void>;
+  connect: (parameters: JoinParameters, resumeSession?: UnfinishedMultiplayerSession) => Promise<void>;
   cancel: () => void;
   retry: () => void;
   toggleReady: () => void;
@@ -65,6 +72,13 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     currentId: null as string | null,
     inFlight: null as Promise<void> | null,
   });
+  const unfinishedSessionRef = useRef({
+    admitted: false,
+    lastSeenSequenceNumber: 0,
+    lastPersistedSequenceNumber: -1,
+    lastPersistAttemptAt: 0,
+    storageUnavailable: false,
+  });
   const factoryRef = useRef(transportFactory);
   const connectInternalRef = useRef<(parameters: JoinParameters, reconnecting: boolean) => Promise<void>>(() => Promise.resolve());
   useEffect(() => { stateRef.current = state; }, [state]);
@@ -89,20 +103,79 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     }
   }, []);
 
+  const removeCurrentUnfinishedSession = useCallback((): void => {
+    const currentState = stateRef.current;
+    if (currentState.joinParameters) {
+      removeUnfinishedMultiplayerSession(currentState.joinParameters, currentState.identity.playerId);
+    }
+    const lifecycle = unfinishedSessionRef.current;
+    lifecycle.admitted = false;
+    lifecycle.lastSeenSequenceNumber = 0;
+    lifecycle.lastPersistedSequenceNumber = -1;
+    lifecycle.lastPersistAttemptAt = 0;
+  }, []);
+
+  const persistCurrentUnfinishedSession = useCallback((now: number, force = false): void => {
+    const lifecycle = unfinishedSessionRef.current;
+    const currentState = stateRef.current;
+    const target = currentState.joinParameters;
+    if (!lifecycle.admitted || lifecycle.storageUnavailable || !target) return;
+    if (!force
+      && lifecycle.lastSeenSequenceNumber <= lifecycle.lastPersistedSequenceNumber
+      && now - lifecycle.lastPersistAttemptAt < UNFINISHED_SESSION_REFRESH_INTERVAL_MS) return;
+
+    lifecycle.lastPersistAttemptAt = now;
+    const saved = saveUnfinishedMultiplayerSession({
+      target,
+      playerId: currentState.identity.playerId,
+      reconnectToken: currentState.identity.reconnectToken,
+      lastSeenSequenceNumber: lifecycle.lastSeenSequenceNumber,
+      lastUsedAt: now,
+    });
+    if (!saved) {
+      lifecycle.storageUnavailable = true;
+      recordConnectionDiagnostic('unfinished-session.storage-unavailable', 'warning');
+      return;
+    }
+    lifecycle.lastPersistedSequenceNumber = Math.max(
+      lifecycle.lastPersistedSequenceNumber,
+      lifecycle.lastSeenSequenceNumber,
+    );
+  }, []);
+
   const handleMessage = useCallback((message: HostMessage): void => {
+    const receivedAt = Date.now();
     if (message.type !== 'host:heartbeat') {
       recordConnectionDiagnostic('host-message.received', 'info', hostMessageDiagnosticDetails(message));
     }
+
+    const lifecycle = unfinishedSessionRef.current;
+    const sequenceNumber = hostMessageSequenceNumber(message);
+    if (sequenceNumber !== null) {
+      lifecycle.lastSeenSequenceNumber = Math.max(lifecycle.lastSeenSequenceNumber, sequenceNumber);
+    }
+
     if (isTerminalJoinError(message)) {
       const current = reconnectRef.current;
       current.terminalJoinRejected = true;
       window.clearTimeout(current.timer);
       current.timer = 0;
+      removeCurrentUnfinishedSession();
       recordConnectionDiagnostic('join.rejected', 'warning', { code: message.code });
       transportRef.current?.close();
+    } else {
+      if (!lifecycle.admitted && hostMessageAdmitsPlayer(message, stateRef.current.identity.playerId)) {
+        lifecycle.admitted = true;
+        recordConnectionDiagnostic('unfinished-session.admitted', 'info', {
+          lastSeenSequenceNumber: lifecycle.lastSeenSequenceNumber,
+        });
+        persistCurrentUnfinishedSession(receivedAt, true);
+      } else if (lifecycle.admitted) {
+        persistCurrentUnfinishedSession(receivedAt);
+      }
     }
-    dispatch({ type: 'host-message', message, receivedAt: Date.now() });
-  }, []);
+    dispatch({ type: 'host-message', message, receivedAt });
+  }, [persistCurrentUnfinishedSession, removeCurrentUnfinishedSession]);
 
   const scheduleReconnect = useCallback((): void => {
     const current = reconnectRef.current;
@@ -324,7 +397,9 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
           attempt: current.attempt,
           ...getDiagnosticErrorDetails(error),
         });
-        shouldReconnect = !isHostVersionUnsupportedError(error) && !isPeerJsAuthenticationError(error);
+        const permanentFailure = isHostVersionUnsupportedError(error) || isPeerJsAuthenticationError(error);
+        if (permanentFailure) removeCurrentUnfinishedSession();
+        shouldReconnect = !permanentFailure;
       } finally {
         if (connectionAttemptRef.current.currentId === connectionAttemptId) {
           connectionAttemptRef.current.inFlight = null;
@@ -334,13 +409,13 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     })();
     connectionAttemptRef.current.inFlight = attemptPromise;
     return attemptPromise;
-  }, [handleMessage, onTransportState, scheduleReconnect]);
+  }, [handleMessage, onTransportState, removeCurrentUnfinishedSession, scheduleReconnect]);
 
   useEffect(() => {
     connectInternalRef.current = connectInternal;
   }, [connectInternal]);
 
-  const connect = useCallback((parameters: JoinParameters): Promise<void> => {
+  const connect = useCallback((parameters: JoinParameters, resumeSession?: UnfinishedMultiplayerSession): Promise<void> => {
     const existingAttempt = connectionAttemptRef.current.inFlight;
     if (existingAttempt !== null) {
       recordConnectionDiagnostic('connection.request.deduplicated', 'warning', {
@@ -350,7 +425,41 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     }
 
     clearConnectionDiagnostics();
-    recordConnectionDiagnostic('connection.session.started', 'info', getConnectionRuntimeDetails(parameters.roomId));
+    const resumingStoredSession = resumeSession !== undefined;
+    recordConnectionDiagnostic(
+      resumingStoredSession ? 'connection.session.resume-requested' : 'connection.session.started',
+      'info',
+      getConnectionRuntimeDetails(parameters.roomId),
+    );
+
+    const lifecycle = unfinishedSessionRef.current;
+    lifecycle.admitted = false;
+    lifecycle.lastSeenSequenceNumber = resumeSession?.lastSeenSequenceNumber ?? 0;
+    lifecycle.lastPersistedSequenceNumber = resumeSession?.lastSeenSequenceNumber ?? -1;
+    lifecycle.lastPersistAttemptAt = 0;
+    lifecycle.storageUnavailable = false;
+
+    if (resumeSession) {
+      const currentIdentity = stateRef.current.identity;
+      const restoredIdentity: PlayerIdentity = {
+        ...currentIdentity,
+        playerId: resumeSession.playerId,
+        reconnectToken: resumeSession.reconnectToken,
+        profile: { ...currentIdentity.profile, id: resumeSession.playerId },
+      };
+      savePlayerIdentity(restoredIdentity);
+      stateRef.current = {
+        ...createInitialState(restoredIdentity, parameters),
+        lastSeenSequenceNumber: resumeSession.lastSeenSequenceNumber,
+      };
+      dispatch({
+        type: 'resume-session',
+        identity: restoredIdentity,
+        parameters,
+        lastSeenSequenceNumber: resumeSession.lastSeenSequenceNumber,
+      });
+    }
+
     const current = reconnectRef.current;
     window.clearTimeout(current.timer);
     current.startedAt = 0;
@@ -362,7 +471,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     connectionAttemptRef.current.currentId = null;
     transportRef.current?.close();
     transportRef.current = null;
-    return connectInternal(parameters, false);
+    return connectInternal(parameters, resumingStoredSession);
   }, [connectInternal]);
 
   const cancel = useCallback((): void => {
@@ -511,6 +620,33 @@ export function useApp(): AppContextValue {
 
 function createConnectionAttemptId(sequence: number): string {
   return `web-${Date.now().toString(36)}-${sequence.toString(36)}`;
+}
+
+function hostMessageSequenceNumber(message: HostMessage): number | null {
+  switch (message.type) {
+    case 'host:heartbeat':
+    case 'host:lost':
+    case 'host:migration-started':
+      return message.sequenceNumber;
+    case 'game:snapshot':
+      return message.snapshot.sequenceNumber;
+    case 'host:migrated':
+      return Math.max(message.sequenceNumber, message.snapshot.sequenceNumber);
+    default:
+      return null;
+  }
+}
+
+function hostMessageAdmitsPlayer(message: HostMessage, playerId: string): boolean {
+  switch (message.type) {
+    case 'room:players':
+      return message.players.some((player) => player.id === playerId);
+    case 'game:snapshot':
+    case 'host:migrated':
+      return message.snapshot.players.some((player) => player.profile.id === playerId);
+    default:
+      return false;
+  }
 }
 
 function hostMessageDiagnosticDetails(message: HostMessage): ConnectionDiagnosticDetails {
