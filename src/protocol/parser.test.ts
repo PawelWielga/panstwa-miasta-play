@@ -10,11 +10,46 @@ const snapshot = {
   hostControlsReview: true, submissions: {}, submittedAtByPlayerId: {}, donePlayerIds: [], votes: {}, hostVoteSuggestions: {}, reviewReady: {}, finalResults: {}, roundScores: {}, finalScores: {}, speedBonusPlayerIds: [],
 };
 
+const wheelState = {
+  schemaVersion: 1,
+  phase: 'spinning',
+  hostSessionId: 'session-1',
+  roundNumber: 1,
+  spinId: 'spin-1',
+  selectedPlayerId: 'host',
+  waitingStartedAt: 100,
+  waitingDeadlineAt: 10_100,
+  spinStartedAt: 1_000,
+  spinDurationMs: 6_000,
+  spinSeed: 123,
+  finalTurns: 6,
+};
+
 describe('parseHostMessage', () => {
   it('parses a valid snapshot', () => {
     const result = parseHostMessage({ type: 'game:snapshot', snapshot });
     expect(result.ok && result.message.type).toBe('game:snapshot');
   });
+
+  it('parses an optional synchronized wheel state', () => {
+    const result = parseHostMessage({ type: 'game:snapshot', snapshot: { ...snapshot, phase: 'letterDraw', wheelState } });
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.message.type !== 'game:snapshot') return;
+    expect(result.message.snapshot.wheelState).toEqual(wheelState);
+  });
+
+  it('rejects a malformed wheel state instead of silently dropping it', () => {
+    const result = parseHostMessage({
+      type: 'game:snapshot',
+      snapshot: { ...snapshot, phase: 'letterDraw', wheelState: { ...wheelState, letter: 'A' } },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('keeps snapshots from older hosts valid when wheelState is absent', () => {
+    expect(parseHostMessage({ type: 'game:snapshot', snapshot }).ok).toBe(true);
+  });
+
   it('rejects malformed reserved messages', () => expect(parseHostMessage({ type: 'game:snapshot', snapshot: { phase: 'hacked' } }).ok).toBe(false));
   it('rejects unknown types', () => expect(parseHostMessage({ type: 'custom:event' }).ok).toBe(false));
 });
