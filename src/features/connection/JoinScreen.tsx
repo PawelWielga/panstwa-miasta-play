@@ -9,6 +9,7 @@ import {
 import { OnlineJoinDisabledScreen } from './OnlineJoinDisabledScreen';
 import {
   normalizeOnlineJoinCode,
+  normalizeShortOnlineJoinCodeInput,
   parseJoinParameters,
   parseOnlineJoinCode,
   sanitizedJoinInvitationPath,
@@ -93,9 +94,9 @@ export function JoinScreen({ search }: { search?: string }) {
     <form onSubmit={submit} noValidate>
       <label>Twój nick<input autoFocus name="playerName" autoComplete="nickname" maxLength={PLAYER_NAME_MAX_LENGTH} value={name} onChange={(event) => setName(event.target.value)} aria-invalid={Boolean(errors.name)} /></label>
       {errors.name ? <p className="field-error">{errors.name}</p> : null}
-      <label>Kod pokoju (6 znaków)<input name="onlineJoinCode" value={onlineJoinCode} maxLength={6} placeholder="ABC234" autoCapitalize="characters" autoComplete="off" spellCheck={false} onChange={(event) => {
+      <label>Kod pokoju (6 znaków)<input name="onlineJoinCode" value={onlineJoinCode} placeholder="ABC234" autoCapitalize="characters" autoComplete="off" spellCheck={false} onChange={(event) => {
         setJoinCodeDirty(true);
-        setOnlineJoinCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6));
+        setOnlineJoinCode(normalizeShortOnlineJoinCodeInput(event.target.value).slice(0, 6));
       }} aria-invalid={Boolean(errors.code)} /></label>
       {(errors.code ?? parsed.errors.code) ? <p className="field-error">{errors.code ?? parsed.errors.code}</p> : null}
       <button className="button button-primary button-large" type="submit">Dołącz do gry</button>
