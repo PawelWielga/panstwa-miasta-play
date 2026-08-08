@@ -1,11 +1,9 @@
 import { act, render } from '@testing-library/react';
 import { useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  HOST_VERSION_UNSUPPORTED_MESSAGE,
-  HostVersionUnsupportedError,
-} from '../config/hostCompatibility';
+import { HostVersionUnsupportedError } from '../config/hostCompatibility';
 import type { ClientMessage, HostMessage } from '../protocol/messages';
+import { connectionFailureCodeForGameError, connectionFailureCodes } from '../protocol/connectionFailure';
 import type { JoinParameters } from '../features/connection/joinParams';
 import { joinParameters } from '../test/fixtures';
 import type {
@@ -59,7 +57,7 @@ class DeferredTransport implements GameTransport {
   }
 
   failUnsupported(): void {
-    this.callbacks?.onError(HOST_VERSION_UNSUPPORTED_MESSAGE);
+    this.callbacks?.onError(connectionFailureCodes.unsupportedVersion);
     this.rejectConnect(new HostVersionUnsupportedError('build-number-too-low', {
       appVersion: '1.1.6',
       buildNumber: 9,
@@ -357,7 +355,7 @@ describe('AppProvider connection lifecycle', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
 
     expect(currentState.connectionStatus).toBe('error');
-    expect(currentState.connectionError).toBe(message);
+    expect(currentState.connectionError).toBe(connectionFailureCodeForGameError(code));
     expect(getTransport(transports, 0).close).toHaveBeenCalled();
     expect(transports).toHaveLength(1);
     expect(readLatestUnfinishedMultiplayerSession()).toBeNull();

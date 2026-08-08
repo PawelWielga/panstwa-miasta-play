@@ -2,7 +2,6 @@ import Peer, { type DataConnection } from 'peerjs';
 import {
   assertHostVersionSupported,
   HOST_VERSION_HANDSHAKE_TIMEOUT_MS,
-  HOST_VERSION_UNSUPPORTED_MESSAGE,
   isHostVersionUnsupportedError,
   MIN_SUPPORTED_HOST_BUILD_NUMBER,
   REQUIRED_HOST_PROTOCOL_VERSION,
@@ -10,6 +9,7 @@ import {
 } from '../config/hostCompatibility';
 import { getDiagnosticErrorDetails, recordConnectionDiagnostic } from '../diagnostics/connectionDiagnostics';
 import { CONNECT_TIMEOUT_MS, PEER_CONNECTION_LABEL } from '../protocol/constants';
+import { connectionFailureCodes, type ConnectionFailureCode } from '../protocol/connectionFailure';
 import { isMessageWithinLimit } from '../protocol/messageSize';
 import type { ClientMessage, JsonValue } from '../protocol/messages';
 import { parseHostMessage } from '../protocol/parser';
@@ -337,14 +337,14 @@ export class PeerJsGameTransport implements GameTransport {
       this.authenticated = false;
       this.closeAttemptResources(peer, connection);
       if (isCurrent) {
-        const userMessage = mapPeerError(error);
+        const failureCode = mapPeerError(error);
         recordConnectionDiagnostic('transport.connect.failed', 'error', {
           connectionAttemptId,
           ...getDiagnosticErrorDetails(error),
-          userMessage,
+          failureCode,
         });
         if (!isHostVersionUnsupportedError(error)) callbacks.onState('error');
-        callbacks.onError(userMessage);
+        callbacks.onError(failureCode);
       }
       throw error;
     }
@@ -501,7 +501,7 @@ export class PeerJsGameTransport implements GameTransport {
         reason: parsed.reason,
         valueKind: data === null ? 'null' : Array.isArray(data) ? 'array' : typeof data,
       });
-      this.callbacks?.onError(`Host wysłał niepoprawne dane: ${parsed.reason}`);
+      this.callbacks?.onError(connectionFailureCodes.unknown);
     }
   }
 
@@ -516,14 +516,14 @@ export class PeerJsGameTransport implements GameTransport {
 
   private handleError(error: unknown): void {
     if (this.closedByUser) return;
-    const userMessage = mapPeerError(error);
+    const failureCode = mapPeerError(error);
     recordConnectionDiagnostic('data-connection.error', 'error', {
       connectionAttemptId: this.connectionAttemptId,
       ...getDiagnosticErrorDetails(error),
-      userMessage,
+      failureCode,
     });
     this.callbacks?.onState('error');
-    this.callbacks?.onError(userMessage);
+    this.callbacks?.onError(failureCode);
   }
 }
 
@@ -565,18 +565,24 @@ function shortPeerId(peerId: string): string {
   return peerId.length <= 18 ? peerId : `${peerId.slice(0, 18)}…`;
 }
 
-export function mapPeerError(error: unknown): string {
-  if (isHostVersionUnsupportedError(error)) return HOST_VERSION_UNSUPPORTED_MESSAGE;
-  if (isPeerJsAuthenticationError(error)) return error.message;
+export function mapPeerError(error: unknown): ConnectionFailureCode {
+  if (isHostVersionUnsupportedError(error)) return connectionFailureCodes.unsupportedVersion;
+  if (isPeerJsAuthenticationError(error)) {
+    return error.reason === 'host-session-mismatch'
+      ? connectionFailureCodes.staleHostSession
+      : connectionFailureCodes.invalidJoinCode;
+  }
   const type = typeof error === 'object' && error !== null && 'type' in error ? String(error.type) : '';
   switch (type) {
-    case 'peer-unavailable': return 'Brak aktywnego pokoju o podanym kodzie. Sprawdź kod albo poproś prowadzącego o utworzenie pokoju.';
-    case 'invalid-id': return 'Kod pokoju jest nieprawidłowy.';
-    case 'network': case 'socket-error': case 'socket-closed': return 'Nie udało się połączyć z usługą gry. Sprawdź internet i spróbuj ponownie.';
-    case 'webrtc': return 'Ta sieć blokuje bezpośrednie połączenie z telefonem prowadzącego. Spróbuj innej sieci Wi‑Fi lub komórkowej albo wyłącz VPN.';
-    case 'server-error': return 'Usługa połączeń jest chwilowo niedostępna.';
+    case 'peer-unavailable': return connectionFailureCodes.roomUnavailable;
+    case 'invalid-id': return connectionFailureCodes.invalidJoinCode;
+    case 'network':
+    case 'socket-error':
+    case 'socket-closed':
+    case 'server-error': return connectionFailureCodes.signalingInterrupted;
+    case 'webrtc': return connectionFailureCodes.p2pNetworkBlocked;
     default: return error instanceof Error && error.message === 'timeout'
-      ? 'Telefon prowadzącego nie odpowiedział na czas. Sprawdź, czy aplikacja prowadzącego nadal działa, i spróbuj ponownie.'
-      : 'Nie udało się połączyć z prowadzącym. Sprawdź internet i spróbuj ponownie.';
+      ? connectionFailureCodes.connectionTimeout
+      : connectionFailureCodes.unknown;
   }
 }

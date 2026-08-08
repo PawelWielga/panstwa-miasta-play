@@ -1,5 +1,6 @@
 import type { JoinParameters } from '../features/connection/joinParams';
 import { isTerminalJoinError } from '../protocol/gameErrors';
+import { connectionFailureCodeForGameError, type ConnectionFailureCode } from '../protocol/connectionFailure';
 import type {
   CountriesCitiesAnswerResult, CountriesCitiesSettings, CountriesCitiesSubmission,
   GameCategory, GameSnapshot, HostMessage, PlayerProfile,
@@ -12,7 +13,7 @@ export interface AppState {
   identity: PlayerIdentity;
   joinParameters: JoinParameters | null;
   connectionStatus: ConnectionStatus;
-  connectionError: string | null;
+  connectionError: ConnectionFailureCode | null;
   players: PlayerProfile[];
   snapshot: GameSnapshot | null;
   categories: GameCategory[];
@@ -38,7 +39,7 @@ export type AppAction =
   | { type: 'identity'; identity: PlayerIdentity }
   | { type: 'join-parameters'; parameters: JoinParameters }
   | { type: 'resume-session'; identity: PlayerIdentity; parameters: JoinParameters; lastSeenSequenceNumber: number }
-  | { type: 'connection'; status: ConnectionStatus; error?: string | null }
+  | { type: 'connection'; status: ConnectionStatus; error?: ConnectionFailureCode | null }
   | { type: 'host-message'; message: HostMessage; receivedAt: number }
   | { type: 'answer'; categoryId: string; value: string }
   | { type: 'submitted'; value: boolean }
@@ -77,8 +78,8 @@ function reduceHostMessage(state: AppState, message: HostMessage, receivedAt: nu
   switch (message.type) {
     case 'room:players': return { ...active, players: message.players };
     case 'game:error': return isTerminalJoinError(message)
-      ? { ...active, connectionStatus: 'error', connectionError: message.message, notice: null }
-      : { ...active, connectionError: message.message, notice: message.message };
+      ? { ...active, connectionStatus: 'error', connectionError: connectionFailureCodeForGameError(message.code), notice: null }
+      : { ...active, notice: message.message };
     case 'host:heartbeat': return { ...active, gameId: message.gameId, lastSeenSequenceNumber: Math.max(state.lastSeenSequenceNumber, message.sequenceNumber) };
     case 'game:snapshot': return applySnapshot(active, message.snapshot);
     case 'host:migrated': return { ...applySnapshot(active, message.snapshot), notice: 'Host gry został zmieniony.' };

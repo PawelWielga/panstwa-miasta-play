@@ -68,7 +68,7 @@ export function clearConnectionDiagnostics(): void {
 
 export function getConnectionRuntimeDetails(roomId?: string): ConnectionDiagnosticDetails {
   return {
-    roomId: roomId ?? null,
+    roomIdPresent: Boolean(roomId),
     online: typeof navigator === 'undefined' ? null : navigator.onLine,
     secureContext: typeof window === 'undefined' ? null : window.isSecureContext,
     visibility: typeof document === 'undefined' ? null : document.visibilityState,
@@ -83,9 +83,9 @@ export function getConnectionRuntimeDetails(roomId?: string): ConnectionDiagnost
 export function getDiagnosticErrorDetails(error: unknown): ConnectionDiagnosticDetails {
   const value = isRecord(error) ? error : null;
   const errorType = value && 'type' in value ? toDiagnosticValue(value.type) : null;
+  const errorCode = value && 'code' in value ? toDiagnosticValue(value.code) : null;
   const errorName = error instanceof Error ? error.name : null;
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  return { errorType, errorName, errorMessage };
+  return { errorType, errorCode, errorName };
 }
 
 export function formatConnectionDiagnostics(
@@ -129,7 +129,14 @@ function persistEntries(): void {
 
 function sanitizeDetails(details: ConnectionDiagnosticDetails): ConnectionDiagnosticDetails {
   return Object.fromEntries(
-    Object.entries(details).filter(([key]) => !sensitiveDetailKeys.has(key.toLowerCase())),
+    Object.entries(details).filter(([key]) => {
+      const normalizedKey = key.toLowerCase();
+      return !sensitiveDetailKeys.has(normalizedKey)
+        && normalizedKey !== 'roomid'
+        && normalizedKey !== 'hostsessionid'
+        && !normalizedKey.endsWith('peerid')
+        && !normalizedKey.endsWith('connectionid');
+    }),
   );
 }
 

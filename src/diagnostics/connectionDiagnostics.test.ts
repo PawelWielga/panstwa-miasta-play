@@ -3,6 +3,7 @@ import {
   clearConnectionDiagnostics,
   formatConnectionDiagnostics,
   getConnectionDiagnostics,
+  getDiagnosticErrorDetails,
   recordConnectionDiagnostic,
 } from './connectionDiagnostics';
 
@@ -19,6 +20,9 @@ describe('connectionDiagnostics', () => {
   it('keeps structured events and removes sensitive details', () => {
     recordConnectionDiagnostic('connection.failed', 'error', {
       roomId: 'ABC123',
+      hostSessionId: 'session-secret',
+      peerId: 'peer-secret',
+      connectionId: 'connection-secret',
       errorType: 'peer-unavailable',
       reconnectToken: 'secret',
       playerName: 'Ala',
@@ -33,9 +37,17 @@ describe('connectionDiagnostics', () => {
       expect.objectContaining({
         level: 'error',
         event: 'connection.failed',
-        details: { roomId: 'ABC123', errorType: 'peer-unavailable' },
+        details: { errorType: 'peer-unavailable' },
       }),
     ]);
+  });
+
+  it('does not expose raw exception messages in diagnostic details', () => {
+    expect(getDiagnosticErrorDetails(new Error('PM4-SECRET reconnect-token'))).toEqual({
+      errorType: null,
+      errorCode: null,
+      errorName: 'Error',
+    });
   });
 
   it('formats diagnostics as copyable plain text', () => {

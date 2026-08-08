@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOST_VERSION_HANDSHAKE_TIMEOUT_MS, MIN_SUPPORTED_HOST_BUILD_NUMBER } from '../config/hostCompatibility';
 import { clearConnectionDiagnostics, getConnectionDiagnostics } from '../diagnostics/connectionDiagnostics';
 import { PEER_CONNECTION_LABEL, PEER_JS_ONLINE_PROTOCOL_VERSION } from '../protocol/constants';
+import { connectionFailureCodes } from '../protocol/connectionFailure';
 import { joinParameters } from '../test/fixtures';
 import type { TransportCallbacks } from './transport';
 import { buildPeerJsHostId, createPeerJsProof } from './onlineJoinCredentials';
@@ -138,9 +139,7 @@ describe('PeerJsGameTransport authenticated contract', () => {
   });
 
   it('explains when a network blocks direct WebRTC', () => {
-    expect(mapPeerError({ type: 'webrtc' })).toBe(
-      'Ta sieć blokuje bezpośrednie połączenie z telefonem prowadzącego. Spróbuj innej sieci Wi‑Fi lub komórkowej albo wyłącz VPN.',
-    );
+    expect(mapPeerError({ type: 'webrtc' })).toBe(connectionFailureCodes.p2pNetworkBlocked);
   });
 
   it('derives an unpredictable host id and opens only after mutual authentication', async () => {

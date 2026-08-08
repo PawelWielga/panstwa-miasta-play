@@ -1,13 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { HOST_VERSION_UNSUPPORTED_MESSAGE } from '../../config/hostCompatibility';
 import { ConnectionErrorScreen } from './ConnectionErrorScreen';
+import { connectionFailureCodes, type ConnectionFailureCode } from '../../protocol/connectionFailure';
 import { appActions, appState } from '../../test/fixtures';
 import { clearConnectionDiagnostics, recordConnectionDiagnostic } from '../../diagnostics/connectionDiagnostics';
 
 const mocked = vi.hoisted(() => ({ value: {} as ReturnType<typeof createValue> }));
-function createValue(connectionError = 'Host niedostępny') {
+function createValue(connectionError: ConnectionFailureCode = connectionFailureCodes.roomUnavailable) {
   return { state: appState({ connectionStatus: 'error', connectionError }), actions: appActions() };
 }
 vi.mock('../../app/AppContext', () => ({ useApp: () => mocked.value }));
@@ -22,18 +22,17 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 it('maps an unreachable host to canonical copy and retry', async () => {
-  mocked.value = createValue('Brak aktywnego pokoju o podanym kodzie. Sprawdź kod albo poproś prowadzącego o utworzenie pokoju.');
+  mocked.value = createValue(connectionFailureCodes.roomUnavailable);
   render(<ConnectionErrorScreen />);
 
   expect(screen.getByText('Nie znaleziono pokoju. Sprawdź, czy prowadzący nadal go udostępnia i spróbuj ponownie.')).toBeInTheDocument();
-  expect(screen.queryByText('Brak aktywnego pokoju o podanym kodzie. Sprawdź kod albo poproś prowadzącego o utworzenie pokoju.')).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Spróbuj ponownie' }));
   expect(mocked.value.actions.retry).toHaveBeenCalled();
   expect(mocked.value.actions.cancel).not.toHaveBeenCalled();
 });
 
 it('asks for the code again when the invitation is invalid', async () => {
-  mocked.value = createValue('Kod pokoju jest nieprawidłowy.');
+  mocked.value = createValue(connectionFailureCodes.invalidJoinCode);
   render(<ConnectionErrorScreen />);
 
   expect(screen.getByText('Kod lub dane pokoju są nieprawidłowe. Poproś prowadzącego o aktualny kod.')).toBeInTheDocument();
@@ -43,7 +42,7 @@ it('asks for the code again when the invitation is invalid', async () => {
 });
 
 it('maps a timeout to retry with the same room code', async () => {
-  mocked.value = createValue('Telefon prowadzącego nie odpowiedział na czas. Sprawdź, czy aplikacja prowadzącego nadal działa, i spróbuj ponownie.');
+  mocked.value = createValue(connectionFailureCodes.connectionTimeout);
   render(<ConnectionErrorScreen />);
 
   expect(screen.getByText('Połączenie trwało zbyt długo. Sprawdź sieć i spróbuj ponownie.')).toBeInTheDocument();
@@ -52,49 +51,48 @@ it('maps a timeout to retry with the same room code', async () => {
 });
 
 it('maps blocked P2P to the change-network recovery', async () => {
-  mocked.value = createValue('Ta sieć blokuje bezpośrednie połączenie z telefonem prowadzącego. Spróbuj innej sieci Wi‑Fi lub komórkowej albo wyłącz VPN.');
+  mocked.value = createValue(connectionFailureCodes.p2pNetworkBlocked);
   render(<ConnectionErrorScreen />);
 
-  expect(screen.getByText('Nie udało się połączyć przez tę sieć. Użyj innej sieci albo hotspotu.')).toBeInTheDocument();
+  expect(screen.getByText('Nie udało się połączyć przez tę sieć. Zmień Wi‑Fi, wyłącz VPN albo użyj hotspotu lub gry lokalnej.')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Użyj innej sieci' }));
   expect(mocked.value.actions.cancel).toHaveBeenCalled();
   expect(mocked.value.actions.retry).not.toHaveBeenCalled();
 });
 
 it('maps a full room to returning to the join screen', async () => {
-  mocked.value = createValue('Pokój jest pełny. Host ustawił limit graczy dla tej rozgrywki.');
+  mocked.value = createValue(connectionFailureCodes.roomFull);
   render(<ConnectionErrorScreen />);
 
-  expect(screen.getByText('Pokój jest pełny. Prowadzący ustawił limit graczy.')).toBeInTheDocument();
+  expect(screen.getByText('Pokój jest pełny. Prowadzący ustawił limit graczy dla tej rozgrywki.')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Wróć do menu' }));
   expect(mocked.value.actions.cancel).toHaveBeenCalled();
 });
 
 it('maps a started game to entering a new code', async () => {
-  mocked.value = createValue('Gra już się rozpoczęła. Poproś hosta o nowy pokój albo spróbuj później.');
+  mocked.value = createValue(connectionFailureCodes.gameAlreadyStarted);
   render(<ConnectionErrorScreen />);
 
-  expect(screen.getByText('Gra już się rozpoczęła. Poproś prowadzącego o nowy pokój.')).toBeInTheDocument();
+  expect(screen.getByText('Gra już się rozpoczęła. Poproś prowadzącego o nowy pokój albo spróbuj później.')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Wpisz kod ponownie' }));
   expect(mocked.value.actions.cancel).toHaveBeenCalled();
 });
 
 it('maps an exhausted reconnect to retry without leaking the raw diagnostic', async () => {
-  mocked.value = createValue('Automatyczne ponowne łączenie nie powiodło się.');
+  mocked.value = createValue(connectionFailureCodes.gameConnectionLost);
   render(<ConnectionErrorScreen />);
 
   expect(screen.getByText('Połączenie zostało przerwane. Spróbuj ponownie.')).toBeInTheDocument();
-  expect(screen.queryByText('Automatyczne ponowne łączenie nie powiodło się.')).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Spróbuj ponownie' }));
   expect(mocked.value.actions.retry).toHaveBeenCalled();
 });
 
 it('falls back to safe generic copy for an unknown technical error', () => {
-  mocked.value = createValue('Host wysłał niepoprawne dane: invalid payload shape');
+  mocked.value = createValue(connectionFailureCodes.unknown);
   render(<ConnectionErrorScreen />);
 
   expect(screen.getByText('Nie udało się dołączyć. Spróbuj ponownie albo poproś prowadzącego o aktualny kod.')).toBeInTheDocument();
-  expect(screen.queryByText(/invalid payload shape/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(connectionFailureCodes.unknown)).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Spróbuj ponownie' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Wróć' })).not.toBeInTheDocument();
 });
@@ -114,11 +112,11 @@ it('shows the recorded connection diagnostics without sensitive player data', as
 });
 
 it('shows a dedicated update-required screen without retry', async () => {
-  mocked.value = createValue(HOST_VERSION_UNSUPPORTED_MESSAGE);
+  mocked.value = createValue(connectionFailureCodes.unsupportedVersion);
   render(<ConnectionErrorScreen />);
 
-  expect(screen.getByRole('heading', { name: 'Prowadzący musi zaktualizować grę' })).toBeInTheDocument();
-  expect(screen.getByText(HOST_VERSION_UNSUPPORTED_MESSAGE)).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Wersje gry nie są zgodne' })).toBeInTheDocument();
+  expect(screen.getByText('Wersje gry nie są zgodne. Zaktualizuj aplikację i poproś prowadzącego o aktualizację.')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Spróbuj ponownie' })).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Wróć do menu' }));
   expect(mocked.value.actions.cancel).toHaveBeenCalled();

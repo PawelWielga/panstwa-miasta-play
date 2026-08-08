@@ -1,4 +1,4 @@
-import { HOST_VERSION_UNSUPPORTED_MESSAGE } from '../../config/hostCompatibility';
+import { connectionFailureCodes, type ConnectionFailureCode } from '../../protocol/connectionFailure';
 
 export type ConnectionRecoveryAction = 'retry' | 'editConnection' | 'changeNetwork' | 'backToMenu';
 
@@ -10,110 +10,100 @@ export interface ConnectionFailureGuidance {
   hint: string;
 }
 
-const invalidInvitation: ConnectionFailureGuidance = {
-  title: 'Nie udało się dołączyć',
-  message: 'Kod lub dane pokoju są nieprawidłowe. Poproś prowadzącego o aktualny kod.',
-  primaryAction: 'editConnection',
-  actionLabel: 'Wpisz kod ponownie',
-  hint: 'Poproś prowadzącego o aktualny kod i wpisz go ponownie.',
+const guidanceByCode: Record<ConnectionFailureCode, ConnectionFailureGuidance> = {
+  [connectionFailureCodes.invalidJoinCode]: {
+    title: 'Nie udało się dołączyć',
+    message: 'Kod lub dane pokoju są nieprawidłowe. Poproś prowadzącego o aktualny kod.',
+    primaryAction: 'editConnection',
+    actionLabel: 'Wpisz kod ponownie',
+    hint: 'Poproś prowadzącego o aktualny kod i wpisz go ponownie.',
+  },
+  [connectionFailureCodes.roomUnavailable]: {
+    title: 'Nie znaleziono pokoju',
+    message: 'Nie znaleziono pokoju. Sprawdź, czy prowadzący nadal go udostępnia i spróbuj ponownie.',
+    primaryAction: 'retry',
+    actionLabel: 'Spróbuj ponownie',
+    hint: 'Ponowienie użyje tego samego kodu pokoju.',
+  },
+  [connectionFailureCodes.staleHostSession]: {
+    title: 'Kod dotyczy innej sesji',
+    message: 'Pod tym kodem działa już inna sesja gry. Poproś prowadzącego o nowy kod.',
+    primaryAction: 'editConnection',
+    actionLabel: 'Wpisz kod ponownie',
+    hint: 'Poproś prowadzącego o nowy kod wygenerowany dla bieżącej gry.',
+  },
+  [connectionFailureCodes.unsupportedVersion]: {
+    title: 'Wersje gry nie są zgodne',
+    message: 'Wersje gry nie są zgodne. Zaktualizuj aplikację i poproś prowadzącego o aktualizację.',
+    primaryAction: 'backToMenu',
+    actionLabel: 'Wróć do menu',
+    hint: 'Po aktualizacji prowadzący powinien utworzyć pokój ponownie.',
+  },
+  [connectionFailureCodes.joinRejected]: {
+    title: 'Nie udało się dołączyć',
+    message: 'Nie udało się dołączyć. Spróbuj ponownie albo poproś prowadzącego o aktualny kod.',
+    primaryAction: 'editConnection',
+    actionLabel: 'Wpisz kod ponownie',
+    hint: 'Poproś prowadzącego o aktualny kod przed kolejną próbą.',
+  },
+  [connectionFailureCodes.roomFull]: {
+    title: 'Pokój jest pełny',
+    message: 'Pokój jest pełny. Prowadzący ustawił limit graczy dla tej rozgrywki.',
+    primaryAction: 'backToMenu',
+    actionLabel: 'Wróć do menu',
+    hint: 'Poproś prowadzącego o zwolnienie miejsca przed kolejną próbą.',
+  },
+  [connectionFailureCodes.gameAlreadyStarted]: {
+    title: 'Gra już się rozpoczęła',
+    message: 'Gra już się rozpoczęła. Poproś prowadzącego o nowy pokój albo spróbuj później.',
+    primaryAction: 'editConnection',
+    actionLabel: 'Wpisz kod ponownie',
+    hint: 'Do trwającej rozgrywki nie można dołączyć jak do nowego pokoju.',
+  },
+  [connectionFailureCodes.connectionTimeout]: {
+    title: 'Połączenie trwa zbyt długo',
+    message: 'Połączenie trwało zbyt długo. Sprawdź sieć i spróbuj ponownie.',
+    primaryAction: 'retry',
+    actionLabel: 'Spróbuj ponownie',
+    hint: 'Ponowienie użyje tego samego kodu pokoju.',
+  },
+  [connectionFailureCodes.p2pNetworkBlocked]: {
+    title: 'Ta sieć nie pozwala się połączyć',
+    message: 'Nie udało się połączyć przez tę sieć. Zmień Wi‑Fi, wyłącz VPN albo użyj hotspotu lub gry lokalnej.',
+    primaryAction: 'changeNetwork',
+    actionLabel: 'Użyj innej sieci',
+    hint: 'Po zmianie sieci wpisz ponownie ten sam kod pokoju.',
+  },
+  [connectionFailureCodes.signalingInterrupted]: {
+    title: 'Łączenie zostało przerwane',
+    message: 'Połączenie zostało przerwane. Spróbuj ponownie.',
+    primaryAction: 'retry',
+    actionLabel: 'Spróbuj ponownie',
+    hint: 'Jeśli gra nadal działa, nie zamykaj jej. W przeciwnym razie spróbuj ponownie.',
+  },
+  [connectionFailureCodes.gameConnectionLost]: {
+    title: 'Utracono połączenie z grą',
+    message: 'Połączenie zostało przerwane. Spróbuj ponownie.',
+    primaryAction: 'retry',
+    actionLabel: 'Spróbuj ponownie',
+    hint: 'Ponowienie spróbuje odzyskać połączenie z tym samym pokojem.',
+  },
+  [connectionFailureCodes.cancelled]: {
+    title: 'Dołączanie anulowane',
+    message: 'Próba dołączenia została anulowana.',
+    primaryAction: 'backToMenu',
+    actionLabel: 'Wróć do menu',
+    hint: 'Możesz rozpocząć nową próbę z ekranu dołączania.',
+  },
+  [connectionFailureCodes.unknown]: {
+    title: 'Nie udało się połączyć',
+    message: 'Nie udało się dołączyć. Spróbuj ponownie albo poproś prowadzącego o aktualny kod.',
+    primaryAction: 'retry',
+    actionLabel: 'Spróbuj ponownie',
+    hint: 'Jeśli problem się powtarza, poproś prowadzącego o nowy kod pokoju.',
+  },
 };
 
-const unreachable: ConnectionFailureGuidance = {
-  title: 'Nie znaleziono pokoju',
-  message: 'Nie znaleziono pokoju. Sprawdź, czy prowadzący nadal go udostępnia i spróbuj ponownie.',
-  primaryAction: 'retry',
-  actionLabel: 'Spróbuj ponownie',
-  hint: 'Ponowienie użyje tego samego kodu pokoju.',
-};
-
-const timeout: ConnectionFailureGuidance = {
-  title: 'Połączenie trwa zbyt długo',
-  message: 'Połączenie trwało zbyt długo. Sprawdź sieć i spróbuj ponownie.',
-  primaryAction: 'retry',
-  actionLabel: 'Spróbuj ponownie',
-  hint: 'Ponowienie użyje tego samego kodu pokoju.',
-};
-
-const onlineUnavailable: ConnectionFailureGuidance = {
-  title: 'Ta sieć nie pozwala się połączyć',
-  message: 'Nie udało się połączyć przez tę sieć. Użyj innej sieci albo hotspotu.',
-  primaryAction: 'changeNetwork',
-  actionLabel: 'Użyj innej sieci',
-  hint: 'Po zmianie sieci wpisz ponownie ten sam kod pokoju.',
-};
-
-const roomFull: ConnectionFailureGuidance = {
-  title: 'Pokój jest pełny',
-  message: 'Pokój jest pełny. Prowadzący ustawił limit graczy.',
-  primaryAction: 'backToMenu',
-  actionLabel: 'Wróć do menu',
-  hint: 'Poproś prowadzącego o zwolnienie miejsca przed kolejną próbą.',
-};
-
-const gameAlreadyStarted: ConnectionFailureGuidance = {
-  title: 'Gra już się rozpoczęła',
-  message: 'Gra już się rozpoczęła. Poproś prowadzącego o nowy pokój.',
-  primaryAction: 'editConnection',
-  actionLabel: 'Wpisz kod ponownie',
-  hint: 'Do trwającej rozgrywki nie można dołączyć jak do nowego pokoju.',
-};
-
-const interrupted: ConnectionFailureGuidance = {
-  title: 'Połączenie zostało przerwane',
-  message: 'Połączenie zostało przerwane. Spróbuj ponownie.',
-  primaryAction: 'retry',
-  actionLabel: 'Spróbuj ponownie',
-  hint: 'Ponowienie spróbuje odzyskać połączenie z tym samym pokojem.',
-};
-
-const unknown: ConnectionFailureGuidance = {
-  title: 'Nie udało się połączyć',
-  message: 'Nie udało się dołączyć. Spróbuj ponownie albo poproś prowadzącego o aktualny kod.',
-  primaryAction: 'retry',
-  actionLabel: 'Spróbuj ponownie',
-  hint: 'Jeśli problem się powtarza, poproś prowadzącego o nowy kod pokoju.',
-};
-
-export function getConnectionFailureGuidance(error: string | null): ConnectionFailureGuidance {
-  if (error === HOST_VERSION_UNSUPPORTED_MESSAGE) {
-    return {
-      title: 'Prowadzący musi zaktualizować grę',
-      message: HOST_VERSION_UNSUPPORTED_MESSAGE,
-      primaryAction: 'backToMenu',
-      actionLabel: 'Wróć do menu',
-      hint: 'Po aktualizacji aplikacji prowadzący powinien utworzyć pokój ponownie.',
-    };
-  }
-
-  const message = normalize(error);
-  if (containsAny(message, ['pokój jest pełny', 'pokoj jest pelny', 'room_full', 'room full'])) return roomFull;
-  if (containsAny(message, ['gra już się rozpoczęła', 'gra juz sie rozpoczela', 'game_already_started'])) return gameAlreadyStarted;
-  if (containsAny(message, [
-    'kod pokoju jest nieprawidłowy', 'kod pokoju jest nieprawidlowy',
-    'nie udało się potwierdzić', 'nie udalo sie potwierdzic', 'nowy kod dołączenia', 'nowy kod dolaczenia',
-    'nieprawidłowy kod', 'nieprawidlowy kod', 'invalid-id',
-  ])) return invalidInvitation;
-  if (containsAny(message, ['nie odpowiedział na czas', 'nie odpowiedzial na czas', 'połączenie trwało zbyt długo', 'polaczenie trwalo zbyt dlugo', 'timeout'])) return timeout;
-  if (containsAny(message, [
-    'ta sieć blokuje', 'ta siec blokuje', 'nie udało się połączyć z usługą gry', 'nie udalo sie polaczyc z usluga gry',
-    'usługa połączeń jest chwilowo niedostępna', 'usluga polaczen jest chwilowo niedostepna',
-    'użyj innej sieci', 'uzyj innej sieci', 'hotspot',
-  ])) return onlineUnavailable;
-  if (containsAny(message, [
-    'połączenie zostało przerwane', 'polaczenie zostalo przerwane', 'utracono połączenie', 'utracono polaczenie',
-    'automatyczne ponowne łączenie nie powiodło się', 'automatyczne ponowne laczenie nie powiodlo sie',
-  ])) return interrupted;
-  if (containsAny(message, [
-    'brak aktywnego pokoju', 'nie znaleziono hosta', 'host niedostępny', 'host niedostepny',
-    'nie udało się połączyć z prowadzącym', 'nie udalo sie polaczyc z prowadzacym',
-  ])) return unreachable;
-  return unknown;
-}
-
-function normalize(value: string | null): string {
-  return value?.trim().toLocaleLowerCase('pl-PL') ?? '';
-}
-
-function containsAny(value: string, fragments: readonly string[]): boolean {
-  return fragments.some((fragment) => value.includes(fragment));
+export function getConnectionFailureGuidance(code: ConnectionFailureCode | null): ConnectionFailureGuidance {
+  return guidanceByCode[code ?? connectionFailureCodes.unknown];
 }

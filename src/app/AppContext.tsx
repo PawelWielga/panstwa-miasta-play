@@ -16,12 +16,10 @@ import {
   recordConnectionDiagnostic,
   type ConnectionDiagnosticDetails,
 } from '../diagnostics/connectionDiagnostics';
-import {
-  HOST_VERSION_UNSUPPORTED_MESSAGE,
-  isHostVersionUnsupportedError,
-} from '../config/hostCompatibility';
+import { isHostVersionUnsupportedError } from '../config/hostCompatibility';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
 import { isTerminalJoinError } from '../protocol/gameErrors';
+import { connectionFailureCodes } from '../protocol/connectionFailure';
 import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createSubmit } from '../protocol/outgoing';
 import type { ClientMessage, HostMessage } from '../protocol/messages';
 import { isPeerJsAuthenticationError, PeerJsGameTransport } from '../peer/PeerJsGameTransport';
@@ -99,7 +97,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         messageType: message.type,
         ...getDiagnosticErrorDetails(error),
       });
-      dispatch({ type: 'connection', status: 'error', error: error instanceof Error ? error.message : 'Nie udało się wysłać wiadomości.' });
+      dispatch({ type: 'connection', status: 'error', error: connectionFailureCodes.gameConnectionLost });
     }
   }, []);
 
@@ -184,7 +182,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       recordConnectionDiagnostic('reconnect.skipped', 'info', { reason: 'terminal-join-rejection' });
       return;
     }
-    if (stateRef.current.connectionError === HOST_VERSION_UNSUPPORTED_MESSAGE) {
+    if (stateRef.current.connectionError === connectionFailureCodes.unsupportedVersion) {
       recordConnectionDiagnostic('reconnect.skipped', 'info', { reason: 'host-version-unsupported' });
       return;
     }
@@ -220,7 +218,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         online: navigator.onLine,
         lastConnectionError: stateRef.current.connectionError,
       });
-      dispatch({ type: 'connection', status: 'lost', error: 'Automatyczne ponowne łączenie nie powiodło się.' });
+      dispatch({ type: 'connection', status: 'lost', error: connectionFailureCodes.gameConnectionLost });
       return;
     }
     const delayMs = reconnectDelay(current.attempt);
@@ -355,7 +353,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
               reason: 'stale-attempt',
             });
           },
-          onError: (message) => {
+          onError: (failureCode) => {
             if (!isCurrentAttempt()) {
               recordConnectionDiagnostic('transport.user-error.ignored', 'info', {
                 connectionAttemptId,
@@ -363,8 +361,8 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
               });
               return;
             }
-            recordConnectionDiagnostic('transport.user-error', 'error', { connectionAttemptId, userMessage: message });
-            dispatch({ type: 'connection', status: 'error', error: message });
+            recordConnectionDiagnostic('transport.user-error', 'error', { connectionAttemptId, failureCode });
+            dispatch({ type: 'connection', status: 'error', error: failureCode });
           },
         }, { connectionAttemptId });
         if (!isCurrentAttempt()) {
@@ -398,7 +396,11 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
           ...getDiagnosticErrorDetails(error),
         });
         const permanentFailure = isHostVersionUnsupportedError(error) || isPeerJsAuthenticationError(error);
-        if (permanentFailure) removeCurrentUnfinishedSession();
+        if (permanentFailure) {
+          window.clearTimeout(current.timer);
+          current.timer = 0;
+          removeCurrentUnfinishedSession();
+        }
         shouldReconnect = !permanentFailure;
       } finally {
         if (connectionAttemptRef.current.currentId === connectionAttemptId) {
@@ -497,7 +499,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       recordConnectionDiagnostic('connection.retry.skipped', 'info', { reason: 'terminal-join-rejection' });
       return;
     }
-    if (stateRef.current.connectionError === HOST_VERSION_UNSUPPORTED_MESSAGE) {
+    if (stateRef.current.connectionError === connectionFailureCodes.unsupportedVersion) {
       recordConnectionDiagnostic('connection.retry.skipped', 'info', { reason: 'host-version-unsupported' });
       return;
     }
