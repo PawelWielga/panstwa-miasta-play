@@ -1,5 +1,5 @@
 import { SUPPORTED_GAME_PROTOCOL_VERSION } from './constants';
-import type { ClientMessage, PlayerProfile } from './messages';
+import type { ClientMessage, CountriesCitiesWheelState, PlayerProfile } from './messages';
 import { generateRequestId } from '../utils/ids';
 
 export interface IdentityCredentials { profile: PlayerProfile; reconnectToken: string }
@@ -22,4 +22,13 @@ export function createSubmit(profile: PlayerProfile, answers: Record<string, str
 }
 export function createEditAnswers(playerId: string): ClientMessage {
   return { type: 'countries-cities:edit-answers', playerId, ...meta(playerId) };
+}
+export function createStartWheelSpin(playerId: string, wheelState: CountriesCitiesWheelState): ClientMessage {
+  return {
+    type: 'player:startWheelSpin',
+    hostSessionId: wheelState.hostSessionId,
+    roundNumber: wheelState.roundNumber,
+    spinId: wheelState.spinId,
+    ...meta(playerId),
+  };
 }
