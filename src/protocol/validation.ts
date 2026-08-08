@@ -16,6 +16,7 @@ import type {
   PlayerProfile,
   ReplicatedPlayerState,
 } from './messages';
+import { parseWheelState } from './wheel';
 
 export type UnknownRecord = Record<string, unknown>;
 
@@ -205,6 +206,7 @@ export function parseSnapshot(value: unknown): GameSnapshot | null {
   const categories = parseCategories(value.categories);
   const settings = parseSettings(value.settings);
   const round = value.round === null ? null : parseRound(value.round);
+  const wheelState = value.wheelState === undefined ? undefined : parseWheelState(value.wheelState);
   const submissions = parseSubmissionMap(value.submissions ?? {});
   const submittedAtByPlayerId = parseNumberMap(value.submittedAtByPlayerId ?? {});
   const votes = parseNestedStringMap(value.votes ?? {});
@@ -217,10 +219,11 @@ export function parseSnapshot(value: unknown): GameSnapshot | null {
   const letterHistory = parseStringList(value.letterHistory);
   const donePlayerIds = parseStringList(value.donePlayerIds);
   const speedBonusPlayerIds = parseStringList(value.speedBonusPlayerIds);
-  if (!phase || players.some((item) => item === null) || !categories || !settings || (value.round !== null && !round) || !submissions || !submittedAtByPlayerId || !votes || !hostVoteSuggestions || !reviewReady || !finalResults || !roundScores || !finalScores || !usedLetters || !letterHistory || !donePlayerIds || !speedBonusPlayerIds) return null;
+  if (!phase || players.some((item) => item === null) || !categories || !settings || (value.round !== null && !round) || (value.wheelState !== undefined && !wheelState) || !submissions || !submittedAtByPlayerId || !votes || !hostVoteSuggestions || !reviewReady || !finalResults || !roundScores || !finalScores || !usedLetters || !letterHistory || !donePlayerIds || !speedBonusPlayerIds) return null;
   return {
     gameId: value.gameId, roomId: value.roomId, sequenceNumber: value.sequenceNumber, hostPlayerId: value.hostPlayerId, phase,
     players: players as ReplicatedPlayerState[], categories, usedLetters, letterHistory, round,
+    ...(wheelState ? { wheelState } : {}),
     endMode: value.endMode, timeMode: value.timeMode, settings, hostControlsReview: value.hostControlsReview, submissions, submittedAtByPlayerId,
     donePlayerIds, votes, hostVoteSuggestions, reviewReady, finalResults, roundScores, finalScores,
     speedBonusPlayerIds,
