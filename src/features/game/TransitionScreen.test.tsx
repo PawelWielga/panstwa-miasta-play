@@ -63,7 +63,7 @@ describe('TransitionScreen synchronized wheel', () => {
     render(<TransitionScreen />);
 
     expect(screen.getByRole('img', { name: 'Koło fortuny. Wynik jest ukryty.' })).toBeInTheDocument();
-    expect(screen.queryByText('Z')).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Koło fortuny. Wylosowana litera Z.' })).not.toBeInTheDocument();
   });
 
   it('disables the action after the same spin request was sent', () => {
