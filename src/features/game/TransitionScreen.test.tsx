@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TransitionScreen } from './TransitionScreen';
@@ -64,6 +64,31 @@ describe('TransitionScreen synchronized wheel', () => {
 
     expect(screen.getByRole('img', { name: 'Koło fortuny. Wynik jest ukryty.' })).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: 'Koło fortuny. Wylosowana litera Z.' })).not.toBeInTheDocument();
+  });
+
+  it('recalculates the waiting countdown immediately after the tab becomes visible', () => {
+    const baseNow = 1_000_000;
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(baseNow);
+    const visibilityState = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const wheel = {
+      ...waitingWheel,
+      waitingStartedAt: baseNow,
+      waitingDeadlineAt: baseNow + 5_000,
+    };
+    mocked.value = {
+      state: appState({ snapshot: snapshot(wheel) }),
+      actions: appActions(),
+    };
+    render(<TransitionScreen />);
+
+    expect(screen.getByText('Start automatyczny za 5 s')).toBeInTheDocument();
+
+    dateNow.mockReturnValue(baseNow + 4_000);
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+
+    expect(screen.getByText('Start automatyczny za 1 s')).toBeInTheDocument();
+    visibilityState.mockRestore();
+    dateNow.mockRestore();
   });
 
   it('disables the action after the same spin request was sent', () => {
