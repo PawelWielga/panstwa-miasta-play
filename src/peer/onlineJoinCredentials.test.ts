@@ -3,6 +3,7 @@ import { joinParameters, testOnlineJoinCode } from '../test/fixtures';
 import {
   buildPeerJsHostId,
   createPeerJsProof,
+  normalizeShortOnlineJoinCodeInput,
   parseOnlineJoinCode,
   verifyPeerJsProof,
 } from './onlineJoinCredentials';
@@ -29,6 +30,16 @@ describe('PeerJS online credentials', () => {
     });
     await expect(buildPeerJsHostId(shortRoomCode)).resolves.toBe(derivedPeerId);
     await expect(buildPeerJsHostId(derivedOnlineJoinCode)).resolves.toBe(derivedPeerId);
+  });
+
+  it('normalizes separators in manually entered short codes', () => {
+    expect(normalizeShortOnlineJoinCodeInput(' ab-c 23d ')).toBe('ABC23D');
+  });
+
+  it('rejects ambiguous short-code characters', () => {
+    for (const code of ['ABC01D', 'ABCI2D', 'ABCO2D']) {
+      expect(() => parseOnlineJoinCode(code)).toThrow();
+    }
   });
 
   it('matches the shared host and client HMAC vectors', async () => {
