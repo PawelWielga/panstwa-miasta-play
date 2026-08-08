@@ -29,18 +29,18 @@ describe('JoinScreen', () => {
     expect(mocked.value.actions.connect).toHaveBeenCalledWith(joinParameters);
   });
 
-  it('derives online credentials from a manually entered six-character code', async () => {
+  it('normalizes separators while entering a six-character code', async () => {
     mocked.value = createValue();
     render(<JoinScreen search="" />);
     const codeField = screen.getByLabelText('Kod pokoju (6 znaków)');
 
-    await userEvent.type(codeField, 'abc234');
+    await userEvent.type(codeField, 'ab-c 23d');
     await userEvent.click(screen.getByRole('button', { name: 'Dołącz do gry' }));
 
-    expect(codeField).toHaveValue('ABC234');
-    expect(codeField).toHaveAttribute('maxlength', '6');
+    expect(codeField).toHaveValue('ABC23D');
+    expect(codeField).not.toHaveAttribute('maxlength');
     expect(mocked.value.actions.connect).toHaveBeenCalledWith(
-      parseOnlineJoinCode('ABC234'),
+      parseOnlineJoinCode('ABC23D'),
     );
   });
 
