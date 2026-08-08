@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JoinScreen } from './JoinScreen';
 import { INCOMPATIBLE_GAME_VERSION_MESSAGE } from './joinParams';
 import { parseOnlineJoinCode } from '../../peer/onlineJoinCredentials';
+import {
+  readLatestUnfinishedMultiplayerSession,
+  saveUnfinishedMultiplayerSession,
+} from '../../storage/unfinishedMultiplayerSessionStorage';
 import { appActions, appState, joinParameters, testOnlineJoinCode } from '../../test/fixtures';
 
 const mocked = vi.hoisted(() => ({ value: {} as ReturnType<typeof createValue> }));
@@ -12,6 +16,7 @@ vi.mock('../../app/AppContext', () => ({ useApp: () => mocked.value }));
 
 describe('JoinScreen', () => {
   afterEach(() => {
+    window.localStorage.clear();
     window.history.replaceState({}, '', '/');
   });
 
@@ -37,6 +42,45 @@ describe('JoinScreen', () => {
     expect(mocked.value.actions.connect).toHaveBeenCalledWith(
       parseOnlineJoinCode('ABC234'),
     );
+  });
+
+  it('offers resuming the latest unfinished game without exposing reconnect secrets', async () => {
+    mocked.value = createValue();
+    saveUnfinishedMultiplayerSession({
+      target: joinParameters,
+      playerId: 'stored-player',
+      reconnectToken: 'stored-token',
+      lastSeenSequenceNumber: 12,
+      lastUsedAt: Date.now(),
+    });
+    const stored = readLatestUnfinishedMultiplayerSession();
+    if (!stored) throw new Error('Expected stored unfinished session.');
+
+    render(<JoinScreen search="" />);
+
+    expect(screen.getByText('Masz niedokończoną grę')).toBeInTheDocument();
+    expect(screen.getByText('ABC123')).toBeInTheDocument();
+    expect(screen.queryByText('stored-token')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Wróć do gry' }));
+
+    expect(mocked.value.actions.connect).toHaveBeenCalledWith(stored.target, stored);
+  });
+
+  it('removes a stored unfinished game after explicit leave', async () => {
+    mocked.value = createValue();
+    saveUnfinishedMultiplayerSession({
+      target: joinParameters,
+      playerId: 'stored-player',
+      reconnectToken: 'stored-token',
+      lastSeenSequenceNumber: 12,
+      lastUsedAt: Date.now(),
+    });
+
+    render(<JoinScreen search="" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Opuść' }));
+
+    expect(readLatestUnfinishedMultiplayerSession()).toBeNull();
+    expect(screen.queryByText('Masz niedokończoną grę')).not.toBeInTheDocument();
   });
 
   it('removes the join secret from browser history after validated submit', async () => {
