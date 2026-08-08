@@ -1,6 +1,5 @@
 import { REQUEST_ID_MAX_LENGTH } from './constants';
 import type { CountriesCitiesWheelPhase, CountriesCitiesWheelState } from './messages';
-import { isBoundedString, isFiniteNumber, isInteger, isRecord } from './validation';
 
 export const COUNTRIES_CITIES_WHEEL_SCHEMA_VERSION = 1 as const;
 
@@ -38,7 +37,7 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
   if (!isInteger(value.finalTurns) || value.finalTurns < 1 || value.finalTurns > 20) return null;
 
   if (phase === 'spinning' && value.letter !== undefined) return null;
-  if (phase === 'finished' && (!isBoundedString(value.letter, 4) || value.letter.trim().length === 0)) return null;
+  if (phase === 'finished' && !isBoundedString(value.letter, 4)) return null;
 
   return {
     schemaVersion: COUNTRIES_CITIES_WHEEL_SCHEMA_VERSION,
@@ -55,4 +54,20 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
     finalTurns: value.finalTurns,
     ...(phase === 'finished' ? { letter: value.letter.trim().toUpperCase() } : {}),
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isBoundedString(value: unknown, max: number): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= max;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isInteger(value: unknown): value is number {
+  return isFiniteNumber(value) && Number.isInteger(value);
 }
