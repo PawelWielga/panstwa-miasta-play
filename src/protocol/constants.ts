@@ -26,6 +26,7 @@ export const clientMessageTypes = [
   'client:rejoin',
   'countries-cities:submit',
   'countries-cities:edit-answers',
+  'player:startWheelSpin',
 ] as const;
 
 export const hostMessageTypes = [
