@@ -96,7 +96,6 @@ function LegacyTransitionScreen() {
 function useWaitingClock(wheelState: CountriesCitiesWheelState): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    setNow(Date.now());
     if (wheelState.phase !== 'waiting') return undefined;
     const timer = window.setInterval(() => setNow(Date.now()), 250);
     const visibility = (): void => {
