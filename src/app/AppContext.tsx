@@ -20,8 +20,9 @@ import { isHostVersionUnsupportedError } from '../config/hostCompatibility';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
 import { isTerminalJoinError } from '../protocol/gameErrors';
 import { connectionFailureCodes } from '../protocol/connectionFailure';
-import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createSubmit } from '../protocol/outgoing';
+import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createStartWheelSpin, createSubmit } from '../protocol/outgoing';
 import type { ClientMessage, HostMessage } from '../protocol/messages';
+import { wheelSpinRequestKey } from '../protocol/wheel';
 import { isPeerJsAuthenticationError, PeerJsGameTransport } from '../peer/PeerJsGameTransport';
 import { canAutoReconnect, reconnectDelay } from '../peer/reconnectPolicy';
 import type { GameTransport, TransportState } from '../peer/transport';
@@ -42,6 +43,7 @@ export interface AppActions {
   cancel: () => void;
   retry: () => void;
   toggleReady: () => void;
+  startWheelSpin: () => void;
   setAnswer: (categoryId: string, value: string) => void;
   submitAnswers: () => void;
   editAnswers: () => void;
@@ -596,6 +598,20 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       const next = !stateRef.current.localReady;
       send(createGameReady(stateRef.current.identity.playerId, next));
       dispatch({ type: 'ready', value: next });
+    },
+    startWheelSpin: () => {
+      const current = stateRef.current;
+      const wheelState = current.snapshot?.wheelState;
+      if (current.connectionStatus !== 'connected'
+        || !wheelState
+        || wheelState.phase !== 'waiting'
+        || wheelState.selectedPlayerId !== current.identity.playerId
+        || Date.now() >= wheelState.waitingDeadlineAt) return;
+      const key = wheelSpinRequestKey(wheelState);
+      if (current.pendingWheelSpinRequestKey === key) return;
+      stateRef.current = { ...current, pendingWheelSpinRequestKey: key };
+      dispatch({ type: 'wheel-spin-requested', key });
+      send(createStartWheelSpin(current.identity.playerId, wheelState));
     },
     setAnswer: (categoryId, value) => dispatch({ type: 'answer', categoryId, value }),
     submitAnswers: () => {
