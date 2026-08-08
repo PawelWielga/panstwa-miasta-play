@@ -76,14 +76,26 @@ describe('unfinished multiplayer session storage', () => {
   it('retains only the newest eight sessions', () => {
     const storage = new MemoryStorage();
     const now = Date.UTC(2026, 7, 7, 20, 0, 0);
+    const codes = [
+      'AB23CC',
+      'AB23DD',
+      'AB23EE',
+      'AB23FF',
+      'AB23GG',
+      'AB23HH',
+      'AB23JJ',
+      'AB23KK',
+      'AB23LL',
+    ];
     for (let index = 0; index < unfinishedMultiplayerSessionMaxEntries + 1; index += 1) {
-      const code = `AB${String(2300 + index)}`;
+      const code = codes[index];
+      if (!code) throw new Error('Missing test join code.');
       expect(saveUnfinishedMultiplayerSession(createSession(code, now + index), storage, now + index)).toBe(true);
     }
 
     const sessions = readUnfinishedMultiplayerSessions(storage, now + unfinishedMultiplayerSessionMaxEntries);
     expect(sessions).toHaveLength(unfinishedMultiplayerSessionMaxEntries);
-    expect(sessions.map((session) => session.target.roomId)).not.toContain('AB2300');
+    expect(sessions.map((session) => session.target.roomId)).not.toContain('AB23CC');
   });
 
   it('falls back safely when storage is unavailable or rejects writes', () => {
