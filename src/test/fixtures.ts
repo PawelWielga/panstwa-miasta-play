@@ -21,13 +21,14 @@ export function appState(overrides: Partial<AppState> = {}): AppState {
     players: [identity.profile, { id: 'host', name: 'Host', emoji: '🎲', color: '#000000' }], snapshot: null,
     categories: [{ id: 'city', name: 'Miasto', order: 0 }], settings: { answerDurationSeconds: 90, roundCount: 5, maxPlayers: 8, speedBonusEnabled: false },
     hostControlsReview: true, currentLetter: 'A', deadlineAt: null, reviewSubmissions: [], reviewCategoryIndex: 0, revealResults: {}, roundScores: {}, finalScores: {},
-    answers: {}, answersSubmitted: false, localReady: false, lastHostActivityAt: Date.now(), lastSeenSequenceNumber: 1, gameId: 'g1', notice: null,
+    answers: {}, answersSubmitted: false, localReady: false, pendingWheelSpinRequestKey: null,
+    lastHostActivityAt: Date.now(), lastSeenSequenceNumber: 1, gameId: 'g1', notice: null,
     ...overrides,
   };
 }
 export function appActions(): AppActions {
   return {
-    updateIdentity: vi.fn((values: Pick<PlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>) => ({ ...identity, ...values })), connect: vi.fn(() => Promise.resolve()), cancel: vi.fn(), retry: vi.fn(), toggleReady: vi.fn(),
+    updateIdentity: vi.fn((values: Pick<PlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>) => ({ ...identity, ...values })), connect: vi.fn(() => Promise.resolve()), cancel: vi.fn(), retry: vi.fn(), toggleReady: vi.fn(), startWheelSpin: vi.fn(),
     setAnswer: vi.fn(), submitAnswers: vi.fn(), editAnswers: vi.fn(), clearNotice: vi.fn(),
   };
 }
