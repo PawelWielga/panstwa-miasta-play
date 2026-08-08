@@ -18,10 +18,19 @@ export interface PeerJsOnlineJoinCredentials {
   onlineJoinCode: string;
 }
 
-const shortOnlineJoinCodePattern = /^[A-Z0-9]{6}$/;
+export const SHORT_ONLINE_JOIN_CODE_LENGTH = 6;
+export const SHORT_ONLINE_JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+const shortOnlineJoinCodePattern = new RegExp(
+  `^[${SHORT_ONLINE_JOIN_CODE_ALPHABET}]{${String(SHORT_ONLINE_JOIN_CODE_LENGTH)}}$`,
+);
 
 export function normalizeOnlineJoinCode(rawCode: string): string {
   return rawCode.trim().toUpperCase();
+}
+
+export function normalizeShortOnlineJoinCodeInput(rawCode: string): string {
+  return rawCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
 export function parseOnlineJoinCode(rawCode: string): PeerJsOnlineJoinCredentials {
@@ -114,14 +123,10 @@ export function shortSessionId(hostSessionId: string): string {
 function deriveOnlineJoinCredentials(roomId: string): PeerJsOnlineJoinCredentials {
   const normalizedRoomId = normalizeOnlineJoinCode(roomId);
   if (!shortOnlineJoinCodePattern.test(normalizedRoomId)) {
-    throw new Error('Kod pokoju musi mieć dokładnie 6 liter lub cyfr.');
+    throw new Error('Kod pokoju musi mieć dokładnie 6 znaków z alfabetu bez I, O, 0 i 1.');
   }
 
-  const friendlySeed = normalizedRoomId
-    .replaceAll('0', '2')
-    .replaceAll('1', '3')
-    .replaceAll('I', 'J')
-    .replaceAll('O', 'P');
+  const friendlySeed = normalizedRoomId;
   const hostSessionId = repeatToLength(friendlySeed, PEER_JS_HOST_SESSION_ID_LENGTH);
   const secret = repeatToLength(
     reverseAscii(friendlySeed),
