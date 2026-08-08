@@ -66,7 +66,7 @@ describe('TransitionScreen synchronized wheel', () => {
     expect(screen.queryByRole('img', { name: 'Koło fortuny. Wylosowana litera Z.' })).not.toBeInTheDocument();
   });
 
-  it('recalculates the waiting countdown immediately after the tab becomes visible', () => {
+  it('recalculates the waiting countdown immediately after the tab becomes visible', async () => {
     const baseNow = 1_000_000;
     const dateNow = vi.spyOn(Date, 'now').mockReturnValue(baseNow);
     const visibilityState = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
@@ -84,7 +84,9 @@ describe('TransitionScreen synchronized wheel', () => {
     expect(screen.getByText('Start automatyczny za 5 s')).toBeInTheDocument();
 
     dateNow.mockReturnValue(baseNow + 4_000);
-    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
 
     expect(screen.getByText('Start automatyczny za 1 s')).toBeInTheDocument();
     visibilityState.mockRestore();
