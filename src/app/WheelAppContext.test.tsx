@@ -5,22 +5,23 @@ import type { ClientMessage, CountriesCitiesWheelState, GameSnapshot, HostMessag
 import { wheelSpinRequestKey } from '../protocol/wheel';
 import type { JoinParameters } from '../features/connection/joinParams';
 import { joinParameters } from '../test/fixtures';
-import type { GameTransport, TransportCallbacks, TransportConnectContext } from '../peer/transport';
+import type { GameTransport, TransportCallbacks } from '../peer/transport';
 import type { AppState } from '../state/gameStore';
 import { AppProvider, useApp, type AppActions } from './AppContext';
 
 class WheelTransport implements GameTransport {
   callbacks: TransportCallbacks | null = null;
-  readonly send = vi.fn((_message: ClientMessage): void => undefined);
+  readonly send = vi.fn((message: ClientMessage): void => { void message; });
   readonly close = vi.fn((): void => undefined);
-  readonly connect = vi.fn(async (
-    _parameters: JoinParameters,
+  readonly connect = vi.fn((
+    parameters: JoinParameters,
     callbacks: TransportCallbacks,
-    _context?: TransportConnectContext,
   ): Promise<void> => {
+    void parameters;
     this.callbacks = callbacks;
     callbacks.onState('connecting');
     callbacks.onState('open');
+    return Promise.resolve();
   });
 
   emitMessage(message: HostMessage): void {
