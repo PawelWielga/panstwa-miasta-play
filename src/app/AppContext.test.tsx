@@ -15,6 +15,10 @@ import type {
   TransportState,
 } from '../peer/transport';
 import type { AppState } from '../state/gameStore';
+import {
+  readLatestUnfinishedMultiplayerSession,
+  saveUnfinishedMultiplayerSession,
+} from '../storage/unfinishedMultiplayerSessionStorage';
 import { AppProvider, useApp, type AppActions } from './AppContext';
 
 class DeferredTransport implements GameTransport {
@@ -140,6 +144,126 @@ describe('AppProvider connection lifecycle', () => {
     expect(getTransport(transports, 0).send).toHaveBeenCalledTimes(1);
   });
 
+  it('persists an unfinished session only after host admission and advances its sequence', async () => {
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+
+    expect(readLatestUnfinishedMultiplayerSession()).toBeNull();
+
+    act(() => {
+      getTransport(transports, 0).emitMessage({
+        type: 'room:players',
+        protocolVersion: 4,
+        players: [currentState.identity.profile],
+      });
+    });
+
+    let stored = readLatestUnfinishedMultiplayerSession();
+    expect(stored).toEqual(expect.objectContaining({
+      playerId: currentState.identity.playerId,
+      reconnectToken: currentState.identity.reconnectToken,
+      lastSeenSequenceNumber: 0,
+    }));
+    expect(stored?.target.roomId).toBe(joinParameters.roomId);
+    expect(stored?.target.hostSessionId).toBe(joinParameters.hostSessionId);
+
+    act(() => {
+      getTransport(transports, 0).emitMessage({
+        type: 'host:heartbeat',
+        gameId: 'game-1',
+        sequenceNumber: 7,
+      });
+    });
+
+    stored = readLatestUnfinishedMultiplayerSession();
+    expect(stored?.lastSeenSequenceNumber).toBe(7);
+  });
+
+  it('restores saved identity and sequence in the resume handshake', async () => {
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+
+    saveUnfinishedMultiplayerSession({
+      target: joinParameters,
+      playerId: 'restored-player',
+      reconnectToken: 'restored-token',
+      lastSeenSequenceNumber: 9,
+      lastUsedAt: Date.now(),
+    });
+    const stored = readLatestUnfinishedMultiplayerSession();
+    if (!stored) throw new Error('Expected stored unfinished session.');
+
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(stored.target, stored); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+
+    expect(getTransport(transports, 0).send).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        type: 'player:hello',
+        reconnectToken: 'restored-token',
+        player: expect.objectContaining({ id: 'restored-player' }),
+      }),
+    );
+    expect(getTransport(transports, 0).send).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: 'client:rejoin',
+        lastSeenSequenceNumber: 9,
+        player: expect.objectContaining({ id: 'restored-player' }),
+      }),
+    );
+    expect(currentState.identity.playerId).toBe('restored-player');
+    expect(currentState.lastSeenSequenceNumber).toBe(9);
+  });
+
+  it('keeps an admitted unfinished session when reconnect is cancelled', async () => {
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+    act(() => {
+      getTransport(transports, 0).emitMessage({
+        type: 'room:players',
+        protocolVersion: 4,
+        players: [currentState.identity.profile],
+      });
+    });
+    expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
+
+    act(() => { actions.cancel(); });
+
+    expect(currentState.connectionStatus).toBe('closed');
+    expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
+  });
+
   it('does not start retry while the previous attempt is still in flight', async () => {
     const transports: DeferredTransport[] = [];
     renderProvider(() => {
@@ -210,6 +334,14 @@ describe('AppProvider connection lifecycle', () => {
       getTransport(transports, 0).open();
       await connectPromise;
     });
+    act(() => {
+      getTransport(transports, 0).emitMessage({
+        type: 'room:players',
+        protocolVersion: 4,
+        players: [currentState.identity.profile],
+      });
+    });
+    expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
 
     act(() => {
       getTransport(transports, 0).emitMessage({ type: 'game:error', code, message });
@@ -223,6 +355,7 @@ describe('AppProvider connection lifecycle', () => {
     expect(currentState.connectionError).toBe(message);
     expect(getTransport(transports, 0).close).toHaveBeenCalled();
     expect(transports).toHaveLength(1);
+    expect(readLatestUnfinishedMultiplayerSession()).toBeNull();
   });
 
   it('ignores stale callbacks and cancels pending retry after a successful reconnect', async () => {
