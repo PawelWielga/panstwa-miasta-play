@@ -84,7 +84,7 @@ describe('TransitionScreen synchronized wheel', () => {
     expect(screen.getByText('Start automatyczny za 5 s')).toBeInTheDocument();
 
     dateNow.mockReturnValue(baseNow + 4_000);
-    await act(async () => {
+    await act(() => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
 
