@@ -1,6 +1,7 @@
 import { PEER_JS_ONLINE_PROTOCOL_VERSION } from '../../protocol/constants';
 import {
   normalizeOnlineJoinCode,
+  normalizeShortOnlineJoinCodeInput,
   parseOnlineJoinCode,
   validateOnlineJoinCredentials,
   type PeerJsOnlineJoinCredentials,
@@ -64,7 +65,11 @@ export function validateOnlineJoinCode(rawCode: string): JoinParameterResult['er
   }
 }
 
-export { normalizeOnlineJoinCode, parseOnlineJoinCode };
+export {
+  normalizeOnlineJoinCode,
+  normalizeShortOnlineJoinCodeInput,
+  parseOnlineJoinCode,
+};
 
 export function sanitizedJoinInvitationPath(rawHref: string): string {
   const url = new URL(rawHref);
