@@ -44,7 +44,9 @@ export function JoinScreen({ search }: { search?: string }) {
     const nextErrors: Partial<Record<FormErrorKey, string>> = {};
     if (!normalizedName) nextErrors.name = 'Wpisz nick gracza.';
     if (normalizedName.length > PLAYER_NAME_MAX_LENGTH) nextErrors.name = `Nick może mieć maksymalnie ${String(PLAYER_NAME_MAX_LENGTH)} znaki.`;
-    Object.assign(nextErrors, validateOnlineJoinCode(onlineJoinCode));
+    if (joinCodeDirty || !parsed.value) {
+      Object.assign(nextErrors, validateOnlineJoinCode(onlineJoinCode));
+    }
     if (parsed.errors.protocol) nextErrors.protocol = parsed.errors.protocol;
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
