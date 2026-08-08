@@ -45,6 +45,24 @@ export interface CountriesCitiesRound {
   categoryIndex: number;
 }
 
+export type CountriesCitiesWheelPhase = 'waiting' | 'spinning' | 'finished';
+
+export interface CountriesCitiesWheelState {
+  schemaVersion: 1;
+  phase: CountriesCitiesWheelPhase;
+  hostSessionId: string;
+  roundNumber: number;
+  spinId: string;
+  selectedPlayerId: string;
+  waitingStartedAt: number;
+  waitingDeadlineAt: number;
+  spinStartedAt?: number;
+  spinDurationMs?: number;
+  spinSeed?: number;
+  finalTurns?: number;
+  letter?: string;
+}
+
 export interface CountriesCitiesSubmission {
   playerId: string;
   playerName: string;
@@ -77,6 +95,7 @@ export interface GameSnapshot {
   usedLetters: string[];
   letterHistory: string[];
   round: CountriesCitiesRound | null;
+  wheelState?: CountriesCitiesWheelState;
   endMode: string;
   timeMode: string;
   settings: CountriesCitiesSettings;
@@ -162,4 +181,10 @@ export interface CountriesCitiesSubmitMessage extends MessageMetadata {
 export interface CountriesCitiesEditAnswersMessage extends MessageMetadata {
   type: 'countries-cities:edit-answers'; playerId: string;
 }
-export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage;
+export interface CountriesCitiesStartWheelSpinMessage extends MessageMetadata {
+  type: 'player:startWheelSpin';
+  hostSessionId: string;
+  roundNumber: number;
+  spinId: string;
+}
+export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage | CountriesCitiesStartWheelSpinMessage;
