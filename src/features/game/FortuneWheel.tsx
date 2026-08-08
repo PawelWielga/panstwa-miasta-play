@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CountriesCitiesWheelState } from '../../protocol/messages';
 import {
   COUNTRIES_CITIES_LETTERS,
@@ -19,12 +19,12 @@ export function FortuneWheel({ wheelState, usedLetters = [], now = Date.now }: F
   const currentTime = useWheelClock(wheelState, reducedMotion, now);
   const segments = COUNTRIES_CITIES_LETTERS;
   const hiddenTarget = hiddenTargetLetter(wheelState, segments);
-  const normalizedUsedLetters = useMemo(() => new Set(
+  const normalizedUsedLetters = new Set(
     usedLetters
       .map((letter) => letter.trim().toUpperCase())
       .filter((letter) => segments.includes(letter as (typeof segments)[number]))
       .filter((letter) => letter !== hiddenTarget),
-  ), [hiddenTarget, usedLetters]);
+  );
   const revealedLetter = wheelState.phase === 'finished' ? wheelState.letter : undefined;
   const animationTime = reducedMotion && wheelState.phase === 'spinning'
     ? wheelState.spinStartedAt ?? currentTime
