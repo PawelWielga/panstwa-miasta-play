@@ -2,6 +2,10 @@ import { useMemo, useState, type SyntheticEvent } from 'react';
 import { useApp } from '../../app/AppContext';
 import { Card, Layout } from '../../components/Layout';
 import { PLAYER_NAME_MAX_LENGTH } from '../../protocol/constants';
+import {
+  readLatestUnfinishedMultiplayerSession,
+  removeUnfinishedMultiplayerSession,
+} from '../../storage/unfinishedMultiplayerSessionStorage';
 import { OnlineJoinDisabledScreen } from './OnlineJoinDisabledScreen';
 import {
   normalizeOnlineJoinCode,
@@ -29,6 +33,7 @@ export function JoinScreen({ search }: { search?: string }) {
   const [joinCodeDirty, setJoinCodeDirty] = useState(false);
   const [name, setName] = useState(state.identity.playerName);
   const [errors, setErrors] = useState<Partial<Record<FormErrorKey, string>>>({});
+  const [unfinishedSession, setUnfinishedSession] = useState(() => readLatestUnfinishedMultiplayerSession());
 
   if (onlineJoinDisabled) return <OnlineJoinDisabledScreen roomId={rawRoomId} />;
 
@@ -61,9 +66,28 @@ export function JoinScreen({ search }: { search?: string }) {
     void actions.connect(credentials);
   };
 
+  const resumeStoredSession = (): void => {
+    if (!unfinishedSession) return;
+    void actions.connect(unfinishedSession.target, unfinishedSession);
+  };
+
+  const leaveStoredSession = (): void => {
+    if (!unfinishedSession) return;
+    removeUnfinishedMultiplayerSession(unfinishedSession.target, unfinishedSession.playerId);
+    setUnfinishedSession(null);
+  };
+
   const protocolError = errors.protocol ?? parsed.errors.protocol;
+  const showResumeOffer = unfinishedSession !== null && !parsed.fromInvitation;
   return <Layout><Card className="join-card">
     <div className="hero"><span className="eyebrow">Dołącz do rozgrywki</span><h1>Gotowy na rundę?</h1><p>Wpisz swój nick i 6-znakowy kod pokoju wyświetlony przez prowadzącego.</p></div>
+    {showResumeOffer ? <>
+      <div className="invite-status success"><span>↻</span><div><strong>Masz niedokończoną grę</strong><small>Pokój <b>{unfinishedSession.target.roomId}</b></small></div></div>
+      <div className="button-row">
+        <button className="button button-primary" type="button" onClick={resumeStoredSession}>Wróć do gry</button>
+        <button className="button button-secondary" type="button" onClick={leaveStoredSession}>Opuść</button>
+      </div>
+    </> : null}
     {parsed.fromInvitation && parsed.value ? <div className="invite-status success"><span>✓</span><div><strong>Zaproszenie jest poprawne</strong><small>Pokój <b>{parsed.value.roomId}</b></small></div></div> : null}
     {protocolError ? <div className="invite-status warning" role="alert"><span>!</span><div><strong>Nie można użyć tego linku</strong><small>{protocolError}</small></div></div> : null}
     <form onSubmit={submit} noValidate>
