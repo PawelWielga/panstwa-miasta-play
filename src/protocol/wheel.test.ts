@@ -1,5 +1,10 @@
+import fixtureText from '../test/fixtures/countries_cities_wheel_state_v1.json?raw';
 import { describe, expect, it } from 'vitest';
 import { parseWheelState } from './wheel';
+
+const EXPECTED_FIXTURE_SHA256 = 'e3a5acaa3100c442a409e71bd308811f948c6a64e208dca79a645a103ce1461e';
+const fixtureBytes = new TextEncoder().encode(fixtureText);
+const fixture = JSON.parse(fixtureText) as WheelContractFixture;
 
 const waitingState = {
   schemaVersion: 1,
@@ -31,6 +36,19 @@ describe('parseWheelState', () => {
     });
   });
 
+  it('matches the shared Flutter and WWW wheel vectors', async () => {
+    const digest = await crypto.subtle.digest('SHA-256', fixtureBytes);
+    expect(toHex(digest)).toBe(EXPECTED_FIXTURE_SHA256);
+    expect(fixture.schemaVersion).toBe(1);
+    expect(fixture.contractId).toBe('countries-cities-wheel-state-v1');
+
+    expect(parseWheelState(fixture.states.waiting)).toEqual(fixture.states.waiting);
+    expect(parseWheelState(fixture.states.spinning)).toEqual(fixture.states.spinning);
+    expect(parseWheelState(fixture.states.finished)).toEqual(fixture.states.finished);
+    expect(parseWheelState(fixture.invalidStates.revealedBeforeFinished)).toBeNull();
+    expect(parseWheelState(fixture.invalidStates.unsupportedSchema)).toBeNull();
+  });
+
   it('does not expose a letter before finished', () => {
     expect(parseWheelState({ ...waitingState, letter: 'A' })).toBeNull();
     expect(parseWheelState({ ...spinningState, letter: 'A' })).toBeNull();
@@ -47,3 +65,24 @@ describe('parseWheelState', () => {
     expect(parseWheelState({ ...spinningState, phase: 'finished' })).toBeNull();
   });
 });
+
+interface WheelContractFixture {
+  schemaVersion: number;
+  contractId: string;
+  states: {
+    waiting: Record<string, unknown>;
+    spinning: Record<string, unknown>;
+    finished: Record<string, unknown>;
+  };
+  invalidStates: {
+    revealedBeforeFinished: Record<string, unknown>;
+    unsupportedSchema: Record<string, unknown>;
+  };
+}
+
+function toHex(value: ArrayBuffer): string {
+  return Array.from(
+    new Uint8Array(value),
+    (byte) => byte.toString(16).padStart(2, '0'),
+  ).join('');
+}
