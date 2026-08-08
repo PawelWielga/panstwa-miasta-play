@@ -37,7 +37,10 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
   if (!isInteger(value.finalTurns) || value.finalTurns < 1 || value.finalTurns > 20) return null;
 
   if (phase === 'spinning' && value.letter !== undefined) return null;
-  if (phase === 'finished' && !isBoundedString(value.letter, 4)) return null;
+  const revealedLetter = phase === 'finished' && typeof value.letter === 'string'
+    ? value.letter.trim().toUpperCase()
+    : undefined;
+  if (phase === 'finished' && (!revealedLetter || revealedLetter.length > 4)) return null;
 
   return {
     schemaVersion: COUNTRIES_CITIES_WHEEL_SCHEMA_VERSION,
@@ -52,7 +55,7 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
     spinDurationMs: value.spinDurationMs,
     spinSeed: value.spinSeed,
     finalTurns: value.finalTurns,
-    ...(phase === 'finished' ? { letter: value.letter.trim().toUpperCase() } : {}),
+    ...(revealedLetter ? { letter: revealedLetter } : {}),
   };
 }
 
