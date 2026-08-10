@@ -16,6 +16,9 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
   if (!isFiniteNumber(value.waitingStartedAt) || value.waitingStartedAt < 0) return null;
   if (!isFiniteNumber(value.waitingDeadlineAt) || value.waitingDeadlineAt < value.waitingStartedAt) return null;
 
+  const letterPool = value.letterPool === undefined ? undefined : parseLetterPool(value.letterPool);
+  if (value.letterPool !== undefined && !letterPool) return null;
+
   const phase = value.phase as CountriesCitiesWheelPhase;
   if (phase === 'waiting') {
     if (value.spinStartedAt !== undefined || value.spinDurationMs !== undefined || value.spinSeed !== undefined || value.finalTurns !== undefined || value.letter !== undefined) return null;
@@ -26,6 +29,7 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
       roundNumber: value.roundNumber,
       spinId: value.spinId,
       selectedPlayerId: value.selectedPlayerId,
+      ...(letterPool ? { letterPool } : {}),
       waitingStartedAt: value.waitingStartedAt,
       waitingDeadlineAt: value.waitingDeadlineAt,
     };
@@ -49,6 +53,7 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
     roundNumber: value.roundNumber,
     spinId: value.spinId,
     selectedPlayerId: value.selectedPlayerId,
+    ...(letterPool ? { letterPool } : {}),
     waitingStartedAt: value.waitingStartedAt,
     waitingDeadlineAt: value.waitingDeadlineAt,
     spinStartedAt: value.spinStartedAt,
@@ -61,6 +66,14 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
 
 export function wheelSpinRequestKey(state: CountriesCitiesWheelState): string {
   return JSON.stringify([state.hostSessionId, state.roundNumber, state.spinId]);
+}
+
+function parseLetterPool(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 32) return null;
+  const letters = value.map((item) => typeof item === 'string' ? item.trim().toUpperCase() : '');
+  if (letters.some((letter) => !/^\p{L}$/u.test(letter))) return null;
+  if (new Set(letters).size !== letters.length) return null;
+  return letters;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

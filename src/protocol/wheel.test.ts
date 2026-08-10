@@ -2,7 +2,7 @@ import fixtureText from '../test/fixtures/countries_cities_wheel_state_v1.json?r
 import { describe, expect, it } from 'vitest';
 import { parseWheelState } from './wheel';
 
-const EXPECTED_FIXTURE_SHA256 = 'e3a5acaa3100c442a409e71bd308811f948c6a64e208dca79a645a103ce1461e';
+const EXPECTED_FIXTURE_SHA256 = '21b6b00316163d32df85ba3b530be1b86f80385e9b3b052a2ec7cb014d26b42c';
 const fixtureBytes = new TextEncoder().encode(fixtureText);
 const fixture = JSON.parse(fixtureText) as WheelContractFixture;
 
@@ -34,6 +34,15 @@ describe('parseWheelState', () => {
       phase: 'finished',
       letter: 'Ą',
     });
+  });
+
+  it('parses the authoritative letter pool and rejects malformed pools', () => {
+    expect(parseWheelState({ ...waitingState, letterPool: ['a', 'B', 'Ł'] })).toMatchObject({
+      letterPool: ['A', 'B', 'Ł'],
+    });
+    expect(parseWheelState({ ...waitingState, letterPool: [] })).toBeNull();
+    expect(parseWheelState({ ...waitingState, letterPool: ['A', 'A'] })).toBeNull();
+    expect(parseWheelState({ ...waitingState, letterPool: ['AB'] })).toBeNull();
   });
 
   it('matches the shared Flutter and WWW wheel vectors', async () => {

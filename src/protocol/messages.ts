@@ -54,6 +54,7 @@ export interface CountriesCitiesWheelState {
   roundNumber: number;
   spinId: string;
   selectedPlayerId: string;
+  letterPool?: string[];
   waitingStartedAt: number;
   waitingDeadlineAt: number;
   spinStartedAt?: number;

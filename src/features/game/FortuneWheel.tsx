@@ -17,12 +17,14 @@ interface FortuneWheelProps {
 export function FortuneWheel({ wheelState, usedLetters = [], now = Date.now }: FortuneWheelProps) {
   const reducedMotion = useReducedMotion();
   const currentTime = useWheelClock(wheelState, reducedMotion, now);
-  const segments = COUNTRIES_CITIES_LETTERS;
+  const segments: readonly string[] = wheelState.letterPool?.length
+    ? wheelState.letterPool
+    : COUNTRIES_CITIES_LETTERS;
   const hiddenTarget = hiddenTargetLetter(wheelState, segments);
   const normalizedUsedLetters = new Set(
     usedLetters
       .map((letter) => letter.trim().toUpperCase())
-      .filter((letter) => segments.includes(letter as (typeof segments)[number]))
+      .filter((letter) => segments.includes(letter))
       .filter((letter) => letter !== hiddenTarget),
   );
   const revealedLetter = wheelState.phase === 'finished' ? wheelState.letter : undefined;

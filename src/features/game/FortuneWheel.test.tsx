@@ -24,6 +24,20 @@ afterEach(() => {
 });
 
 describe('FortuneWheel', () => {
+  it('renders the host-provided letter pool instead of the fallback list', () => {
+    mockReducedMotion(true);
+    const { container } = render(
+      <FortuneWheel
+        wheelState={{ ...spinningState, letterPool: ['A', 'B', 'Ł'] }}
+        now={() => 2_500}
+      />,
+    );
+
+    expect(
+      Array.from(container.querySelectorAll('.fortune-wheel-label')).map((label) => label.textContent),
+    ).toEqual(['A', 'B', 'Ł']);
+  });
+
   it('recalculates spinning rotation from host time when the tab becomes visible', () => {
     mockReducedMotion(false);
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
