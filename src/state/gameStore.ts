@@ -85,8 +85,18 @@ function reduceHostMessage(state: AppState, message: HostMessage, receivedAt: nu
       ? { ...active, connectionStatus: 'error', connectionError: connectionFailureCodeForGameError(message.code), notice: null }
       : { ...active, notice: message.message };
     case 'host:heartbeat': return { ...active, gameId: message.gameId, lastSeenSequenceNumber: Math.max(state.lastSeenSequenceNumber, message.sequenceNumber) };
-    case 'game:snapshot': return applySnapshot(active, message.snapshot);
-    case 'host:migrated': return { ...applySnapshot(active, message.snapshot), notice: 'Host gry został zmieniony.' };
+    case 'game:snapshot': return isStaleSnapshot(state, message.snapshot)
+      ? active
+      : applySnapshot(active, message.snapshot);
+    case 'host:migrated': {
+      if (message.sequenceNumber < state.lastSeenSequenceNumber || isStaleSnapshot(state, message.snapshot)) return active;
+      const migrated = applySnapshot(active, message.snapshot);
+      return {
+        ...migrated,
+        lastSeenSequenceNumber: Math.max(migrated.lastSeenSequenceNumber, message.sequenceNumber),
+        notice: 'Host gry został zmieniony.',
+      };
+    }
     case 'host:lost': return { ...active, notice: 'Połączenie z hostem zostało utracone.' };
     case 'host:migration-started': return { ...active, notice: 'Trwa próba zmiany hosta gry.' };
     case 'game:reset': return { ...active, snapshot: null, currentLetter: null, deadlineAt: null, answers: {}, answersSubmitted: false, localReady: false, pendingWheelSpinRequestKey: null, revealResults: {}, roundScores: {}, finalScores: {}, notice: 'Host przygotowuje nową grę.' };
@@ -100,6 +110,10 @@ function reduceHostMessage(state: AppState, message: HostMessage, receivedAt: nu
     case 'countries-cities:reveal': return { ...active, reviewCategoryIndex: message.categoryIndex, revealResults: message.finalResults };
     case 'countries-cities:results': return { ...active, revealResults: message.finalResults, roundScores: message.roundScores, finalScores: message.finalScores };
   }
+}
+
+function isStaleSnapshot(state: AppState, snapshot: GameSnapshot): boolean {
+  return snapshot.sequenceNumber < state.lastSeenSequenceNumber;
 }
 
 function applySnapshot(state: AppState, snapshot: GameSnapshot): AppState {
