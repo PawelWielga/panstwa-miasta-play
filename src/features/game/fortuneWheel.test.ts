@@ -57,4 +57,29 @@ describe('fortune wheel math', () => {
     expect(finalDuringSpin - initial).toBeGreaterThanOrEqual(6 * FULL_TURN);
     expect(finalDuringSpin - initial).toBeLessThan(7 * FULL_TURN);
   });
+
+  it('honors different host-supplied spin profiles without rerandomizing them', () => {
+    const lighterProfile: CountriesCitiesWheelState = {
+      ...spinningState,
+      spinDurationMs: 3_000,
+      finalTurns: 5,
+    };
+    const strongerProfile: CountriesCitiesWheelState = {
+      ...spinningState,
+      spinDurationMs: 4_500,
+      finalTurns: 8,
+    };
+
+    expect(wheelSpinProgress(lighterProfile, 3_500)).toBeCloseTo(0.5);
+    expect(wheelSpinProgress(strongerProfile, 4_250)).toBeCloseTo(0.5);
+
+    const initial = initialWheelRotation(spinningState);
+    const lighterEnd = wheelRotation(lighterProfile, 5_000) - initial;
+    const strongerEnd = wheelRotation(strongerProfile, 6_500) - initial;
+
+    expect(lighterEnd).toBeGreaterThanOrEqual(5 * FULL_TURN);
+    expect(lighterEnd).toBeLessThan(6 * FULL_TURN);
+    expect(strongerEnd).toBeGreaterThanOrEqual(8 * FULL_TURN);
+    expect(strongerEnd).toBeLessThan(9 * FULL_TURN);
+  });
 });
