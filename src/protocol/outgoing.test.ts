@@ -21,17 +21,18 @@ describe('outgoing protocol version', () => {
 });
 
 describe('wheel intent', () => {
-  it('copies only authoritative wheel identifiers into the start intent', () => {
-    const message = createStartWheelSpin(profile.id, {
-      schemaVersion: 1,
-      phase: 'waiting',
+  it('copies authoritative identifiers and optional hold duration into the start intent', () => {
+    const wheelState = {
+      schemaVersion: 1 as const,
+      phase: 'waiting' as const,
       hostSessionId: 'session-1',
       roundNumber: 3,
       spinId: 'spin-3',
       selectedPlayerId: profile.id,
       waitingStartedAt: 1_000,
       waitingDeadlineAt: 11_000,
-    });
+    };
+    const message = createStartWheelSpin(profile.id, wheelState, 1250);
 
     expect(message).toMatchObject({
       type: 'player:startWheelSpin',
@@ -39,8 +40,10 @@ describe('wheel intent', () => {
       hostSessionId: 'session-1',
       roundNumber: 3,
       spinId: 'spin-3',
+      holdDurationMs: 1250,
     });
     expect(message).toHaveProperty('requestId');
     expect(message).toHaveProperty('sentAt');
+    expect(createStartWheelSpin(profile.id, wheelState)).not.toHaveProperty('holdDurationMs');
   });
 });

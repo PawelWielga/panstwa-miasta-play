@@ -187,5 +187,6 @@ export interface CountriesCitiesStartWheelSpinMessage extends MessageMetadata {
   hostSessionId: string;
   roundNumber: number;
   spinId: string;
+  holdDurationMs?: number;
 }
 export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage | CountriesCitiesStartWheelSpinMessage;

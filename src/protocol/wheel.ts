@@ -21,7 +21,18 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
 
   const phase = value.phase as CountriesCitiesWheelPhase;
   if (phase === 'waiting') {
-    if (value.spinStartedAt !== undefined || value.spinDurationMs !== undefined || value.spinSeed !== undefined || value.finalTurns !== undefined || value.letter !== undefined) return null;
+    if (value.spinStartedAt !== undefined || value.spinDurationMs !== undefined || value.letter !== undefined) return null;
+    const spinSeed = value.spinSeed === undefined
+      ? undefined
+      : isInteger(value.spinSeed) && value.spinSeed >= 0
+        ? value.spinSeed
+        : null;
+    const finalTurns = value.finalTurns === undefined
+      ? undefined
+      : isInteger(value.finalTurns) && value.finalTurns >= 1 && value.finalTurns <= 20
+        ? value.finalTurns
+        : null;
+    if (spinSeed === null || finalTurns === null) return null;
     return {
       schemaVersion: COUNTRIES_CITIES_WHEEL_SCHEMA_VERSION,
       phase,
@@ -32,6 +43,8 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
       ...(letterPool ? { letterPool } : {}),
       waitingStartedAt: value.waitingStartedAt,
       waitingDeadlineAt: value.waitingDeadlineAt,
+      ...(spinSeed === undefined ? {} : { spinSeed }),
+      ...(finalTurns === undefined ? {} : { finalTurns }),
     };
   }
 

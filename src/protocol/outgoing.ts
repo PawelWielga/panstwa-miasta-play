@@ -23,12 +23,17 @@ export function createSubmit(profile: PlayerProfile, answers: Record<string, str
 export function createEditAnswers(playerId: string): ClientMessage {
   return { type: 'countries-cities:edit-answers', playerId, ...meta(playerId) };
 }
-export function createStartWheelSpin(playerId: string, wheelState: CountriesCitiesWheelState): ClientMessage {
+export function createStartWheelSpin(
+  playerId: string,
+  wheelState: CountriesCitiesWheelState,
+  holdDurationMs?: number,
+): ClientMessage {
   return {
     type: 'player:startWheelSpin',
     hostSessionId: wheelState.hostSessionId,
     roundNumber: wheelState.roundNumber,
     spinId: wheelState.spinId,
+    ...(holdDurationMs === undefined ? {} : { holdDurationMs }),
     ...meta(playerId),
   };
 }

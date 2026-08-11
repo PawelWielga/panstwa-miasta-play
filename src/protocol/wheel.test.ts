@@ -36,6 +36,16 @@ describe('parseWheelState', () => {
     });
   });
 
+  it('accepts a host-selected animation profile while waiting', () => {
+    expect(parseWheelState({ ...waitingState, spinSeed: 12345, finalTurns: 7 })).toMatchObject({
+      phase: 'waiting',
+      spinSeed: 12345,
+      finalTurns: 7,
+    });
+    expect(parseWheelState({ ...waitingState, spinSeed: -1, finalTurns: 7 })).toBeNull();
+    expect(parseWheelState({ ...waitingState, spinSeed: 12345, finalTurns: 21 })).toBeNull();
+  });
+
   it('parses the authoritative letter pool and rejects malformed pools', () => {
     expect(parseWheelState({ ...waitingState, letterPool: ['a', 'B', 'Ł'] })).toMatchObject({
       letterPool: ['A', 'B', 'Ł'],
