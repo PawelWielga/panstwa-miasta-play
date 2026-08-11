@@ -2,7 +2,6 @@
 
 Dokument opisuje kontrakt używany przez klienta WWW. Źródłem prawdy pozostaje implementacja hosta Android z repozytorium `PawelWielga/panstwa-miasta` oraz typy w `src/protocol/messages.ts`.
 
-
 ## Wersjonowane źródło kontraktu PeerJS
 
 Wartości transportu v4 używane przez runtime klienta WWW są zebrane w
@@ -25,30 +24,47 @@ bez cichego downgrade; nowe pola v4 mogą być dodawane tylko jako opcjonalne.
 
 ## Transport PeerJS v4
 
-Link zaproszenia zawiera jeden kod sesji online oraz jawną wersję kontraktu transportowego:
+Ręczne dołączenie online używa wyłącznie 6-znakowego kodu pokoju, np.:
 
 ```text
-https://gra.dihor.pl/?code=PM4-ABC123-<hostSessionId>-<secret>&protocol=4
+ABC234
 ```
 
-Format kodu:
+Kod korzysta z alfabetu `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`. Klient WWW normalizuje ręczne wejście i nie wymaga od użytkownika PIN-u, hasła, Peer ID ani pełnego `PM4-...`.
+
+Obie strony deterministycznie rozwijają 6 znaków do wewnętrznych credentials v4:
 
 ```text
 PM4-{roomId}-{hostSessionId}-{secret}
 ```
 
-- `roomId`: 6 znaków,
+- `roomId`: 6-znakowy kod użytkownika,
 - `hostSessionId`: 26 znaków z alfabetu `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`,
 - `secret`: 20 znaków z tego samego alfabetu,
-- kod jest generowany ponownie przy każdym włączeniu gry online,
-- po wyłączeniu gry online poprzedni kod przestaje być ważny.
+- dla nowych hostów `hostSessionId` i `secret` są deterministycznie wyprowadzane z `roomId`,
+- pełny `PM4-...` jest formatem transportowym i kompatybilnościowym, nie kodem do ręcznego wpisywania,
+- starsze pełne credentials pozostają parsowalne w linkach/QR, aby nie zrywać istniejących zaproszeń.
 
-Klient nie przyjmuje starszego linku zawierającego wyłącznie `room`. Nie ma fallbacku do przewidywalnego Peer ID ani do nieuwierzytelnionego kontraktu.
-
-Peer ID hosta nie zawiera jawnego sekretu. Obie strony wyliczają go identycznie:
+Link lub QR może automatycznie przenosić pełne dane techniczne, np.:
 
 ```text
-panstwa-miasta-room-v4-{pierwsze 32 znaki hex SHA-256(całego kodu)}
+https://gra.dihor.pl/?code=PM4-ABC234-<hostSessionId>-<secret>&protocol=4
+```
+
+Nie zmienia to UX: gracz ręcznie przekazuje i wpisuje tylko `ABC234`. Klient nie wykonuje cichego downgrade'u do protokołu v3 ani do nieuwierzytelnionego transportu.
+
+Model bezpieczeństwa jest świadomie ograniczony entropią 6-znakowego kodu. Deterministyczne rozwinięcie credentials nie zwiększa jego siły, ale zachowujemy challenge-response, HMAC, jednorazowy nonce, timeouty, ochronę przed replay i brak danych gracza przed zakończeniem handshake.
+
+Peer ID hosta nie zawiera jawnego sekretu. Dla krótkiego kodu obie strony najpierw wyprowadzają identyczne wewnętrzne `PM4-...`, a następnie liczą:
+
+```text
+panstwa-miasta-room-v4-{pierwsze 32 znaki hex SHA-256(wewnętrznego pełnego kodu)}
+```
+
+Wspólny wektor regresyjny Android ↔ WWW:
+
+```text
+ABC234 -> panstwa-miasta-room-v4-d7fee74e05cf19a0c1b97b4486a7b738
 ```
 
 `DataConnection` używa:
@@ -131,7 +147,7 @@ Bez TURN połączenie nie jest gwarantowane przy CGNAT, symetrycznym NAT, VPN, r
 }
 ```
 
-HMAC-SHA-256 używa całego znormalizowanego kodu jako klucza. Podpisywana wartość składa się z pól rozdzielonych pojedynczym znakiem LF:
+HMAC-SHA-256 używa pełnego znormalizowanego wewnętrznego kodu v4 jako klucza. Dla ręcznego 6-znakowego kodu klient sam deterministycznie wyprowadza ten klucz; użytkownik go nie zna i nie wpisuje. Podpisywana wartość składa się z pól rozdzielonych pojedynczym znakiem LF:
 
 ```text
 panstwa-miasta-peerjs-v4
@@ -152,12 +168,12 @@ Błąd wersji lub uwierzytelnienia zamyka połączenie przed wysłaniem danych g
 
 ### Kolejność wdrożenia
 
-Bezpieczna kolejność częściowego wdrożenia to:
+Zmiany kontraktu muszą być wdrażane skoordynowanie:
 
-1. klient WWW obsługujący wyłącznie v4,
-2. host Android publikujący kody v4.
+1. klient WWW rozumie bieżący v4 i 6-znakowy kod użytkownika,
+2. host Android publikuje ten sam kontrakt v4 i wyprowadza z kodu identyczne credentials.
 
-W okresie między wdrożeniami starszy host nie połączy się z nowym klientem, ale nie nastąpi cichy downgrade. LAN/hotspot Android pozostaje niezależny od tej zmiany.
+Pełny `PM4-...` pozostaje parsowalny dla zgodności starszych linków i QR. Nie oznacza to przywrócenia go jako ręcznego kodu. LAN/hotspot Android pozostaje niezależny od tej zmiany.
 
 ## Ograniczenia i identyfikatory
 
