@@ -113,6 +113,13 @@ function reduceHostMessage(state: AppState, message: HostMessage, receivedAt: nu
 }
 
 function isStaleSnapshot(state: AppState, snapshot: GameSnapshot): boolean {
+  const lastAppliedSnapshotSequenceNumber = state.snapshot?.sequenceNumber;
+  if (
+    lastAppliedSnapshotSequenceNumber !== undefined &&
+    snapshot.sequenceNumber <= lastAppliedSnapshotSequenceNumber
+  ) {
+    return true;
+  }
   return snapshot.sequenceNumber < state.lastSeenSequenceNumber;
 }
 

@@ -114,6 +114,66 @@ describe('gameReducer', () => {
     expect(stale.lastHostActivityAt).toBe(30);
   });
 
+  it('ignores a duplicate game snapshot that has already been applied', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('11111111-1111-4111-8111-111111111111');
+    const initial = createInitialState(createPlayerIdentity(), null);
+    const current = gameReducer(initial, {
+      type: 'host-message',
+      receivedAt: 20,
+      message: {
+        type: 'game:snapshot',
+        snapshot: createSnapshot(initial.identity.profile, 8, 'answering'),
+      },
+    });
+
+    const duplicate = gameReducer(current, {
+      type: 'host-message',
+      receivedAt: 30,
+      message: {
+        type: 'game:snapshot',
+        snapshot: createSnapshot(initial.identity.profile, 8, 'lobby'),
+      },
+    });
+
+    expect(duplicate.snapshot?.sequenceNumber).toBe(8);
+    expect(duplicate.snapshot?.phase).toBe('answering');
+    expect(duplicate.currentLetter).toBe('B');
+    expect(duplicate.lastSeenSequenceNumber).toBe(8);
+    expect(duplicate.lastHostActivityAt).toBe(30);
+  });
+
+  it('accepts a snapshot matching a heartbeat sequence when that snapshot was not applied yet', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('11111111-1111-4111-8111-111111111111');
+    const initial = createInitialState(createPlayerIdentity(), null);
+    const heartbeat = gameReducer(initial, {
+      type: 'host-message',
+      receivedAt: 20,
+      message: {
+        type: 'host:heartbeat',
+        gameId: 'game-1',
+        sequenceNumber: 8,
+      },
+    });
+
+    expect(heartbeat.snapshot).toBeNull();
+    expect(heartbeat.lastSeenSequenceNumber).toBe(8);
+
+    const current = gameReducer(heartbeat, {
+      type: 'host-message',
+      receivedAt: 30,
+      message: {
+        type: 'game:snapshot',
+        snapshot: createSnapshot(initial.identity.profile, 8, 'answering'),
+      },
+    });
+
+    expect(current.snapshot?.sequenceNumber).toBe(8);
+    expect(current.snapshot?.phase).toBe('answering');
+    expect(current.currentLetter).toBe('B');
+    expect(current.lastSeenSequenceNumber).toBe(8);
+    expect(current.lastHostActivityAt).toBe(30);
+  });
+
   it('ignores stale host migration without regressing the snapshot or showing a notice', () => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValue('11111111-1111-4111-8111-111111111111');
     const initial = createInitialState(createPlayerIdentity(), null);
