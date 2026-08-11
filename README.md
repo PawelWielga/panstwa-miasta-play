@@ -1,5 +1,7 @@
 # Państwa Miasta Play
 
+**[▶ Otwórz aplikację](https://pawelwielga.github.io/panstwa-miasta-play/)**
+
 Statyczny klient przeglądarkowy gry **Państwa Miasta**. Gracz dołącza z telefonu, tabletu lub komputera do rozgrywki hostowanej przez aplikację Android.
 
 ## Architektura
@@ -16,10 +18,10 @@ Host Android pozostaje autorytatywny dla faz gry, czasu, odpowiedzi, ocen i punk
 
 ## Wymagania
 
-- Node.js 22 lub nowszy
-- npm
-- nowoczesna przeglądarka z WebRTC, Web Crypto i `localStorage`
-- HTTPS w środowisku produkcyjnym
+- Node.js 22 lub nowszy,
+- npm,
+- nowoczesna przeglądarka z WebRTC, Web Crypto i `localStorage`,
+- HTTPS w środowisku produkcyjnym.
 
 ## Uruchomienie lokalne
 
@@ -41,39 +43,65 @@ npm run build
 
 Testy PeerJS korzystają z interfejsu transportu i mocków. Nie łączą się z publicznym PeerJS Cloud.
 
-## Link zaproszenia
+## Dołączanie online
 
-Aplikacja Android generuje pojedynczy kod sesji online i umieszcza go w linku:
+Ręczne dołączenie używa wyłącznie **6-znakowego kodu**, np.:
 
 ```text
-https://gra.dihor.pl/?code=PM4-ABC123-...-...&protocol=4
+ABC234
 ```
 
-Gracz podaje wyłącznie nick i cały kod. Formularz nie pokazuje Peer ID, wersji protokołu ani innych parametrów technicznych. Kod jest losowy i rotowany po każdym wyłączeniu i ponownym włączeniu gry online.
+Kod korzysta z alfabetu `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`. Formularz normalizuje wielkość liter i usuwa separatory. Użytkownik nie wpisuje Peer ID, wersji protokołu, dodatkowego PIN-u ani pełnego kodu `PM4-...`.
 
-Starszy link `?room=ABC123` jest odrzucany czytelnym komunikatem. Klient nie wykonuje fallbacku do starego, przewidywalnego Peer ID.
+Link lub QR używa parametru `code`. Może przenosić krótki kod albo pełne wewnętrzne credentials v4 dla zgodności ze starszymi zaproszeniami, np.:
 
-## Uwierzytelniony kontrakt PeerJS
+```text
+https://gra.dihor.pl/?code=ABC234
+```
 
-Peer ID jest wyprowadzany z SHA-256 całego kodu sesji. `DataConnection` używa etykiety `panstwa-miasta-game-v4` oraz metadata zawierającej tylko `hostSessionId` i wersję 4.
+lub kompatybilnościowo:
+
+```text
+https://gra.dihor.pl/?code=PM4-ABC234-<hostSessionId>-<secret>&protocol=4
+```
+
+Pełny `PM4-...` pozostaje formatem technicznym i kompatybilnościowym. Nie jest ręcznym fallbackiem dla użytkownika. Starszy parametr `room` jest odrzucany czytelnym komunikatem zamiast uruchamiać przewidywalny transport v3.
+
+## Uwierzytelniony kontrakt PeerJS v4
+
+Dla 6-znakowego kodu obie strony deterministycznie wyprowadzają identyczne wewnętrzne credentials v4. Następnie Peer ID hosta jest liczony z SHA-256 pełnego wewnętrznego kodu:
+
+```text
+panstwa-miasta-room-v4-{pierwsze 32 znaki hex SHA-256(wewnętrznego pełnego kodu)}
+```
+
+Wspólny wektor regresyjny Android ↔ WWW:
+
+```text
+ABC234 -> panstwa-miasta-room-v4-d7fee74e05cf19a0c1b97b4486a7b738
+```
+
+`DataConnection` używa etykiety `panstwa-miasta-game-v4` oraz metadata zawierającej `hostSessionId` i wersję kontraktu.
 
 Po otwarciu kanału host i klient wykonują wzajemny handshake HMAC-SHA-256:
 
-1. host wysyła jednorazowy `bridge:challenge` z dowodem posiadania kodu,
+1. host wysyła jednorazowy `bridge:challenge`,
 2. klient weryfikuje hosta i odsyła `bridge:authenticate`,
-3. host weryfikuje klienta i dopiero wtedy otwiera lokalny most do silnika gry,
+3. host weryfikuje klienta i dopiero wtedy otwiera most do silnika gry,
 4. host wysyła `bridge:ready`,
 5. dopiero wtedy klient wysyła `player:hello` i ewentualny `client:rejoin`.
 
 Profil, `playerId` i `reconnectToken` nie są wysyłane przed potwierdzeniem hosta. Powtórzone lub spóźnione komunikaty handshake, zły HMAC, niezgodna sesja i timeout kończą próbę. Sekrety, nonce i pełne dowody są wykluczone z diagnostyki.
 
-Pełny format kodu, kanoniczny tekst HMAC, limity i wspólne wektory testowe opisuje `docs/protocol-contract.md`.
+Model bezpieczeństwa jest świadomie ograniczony entropią 6-znakowego kodu. Deterministyczne wyprowadzenie credentials nie zwiększa siły sekretu: osoba, która poprawnie odgadnie kod, może próbować dołączyć. Warstwa v4 nadal chroni kolejność handshake, integralność, replay i przedwczesne ujawnienie danych gracza.
+
+Pełny kontrakt, canonicalizację HMAC, limity i wspólne wektory testowe opisuje `docs/protocol-contract.md`.
 
 ## Zgodność wersji hosta
 
-Klient WWW wspiera kontrakt PeerJS v4 i minimalny build ustawiony w `src/config/hostCompatibility.ts`. Starszy host lub stary link są odrzucane przed przesłaniem danych gracza. Błąd uwierzytelnienia nie uruchamia automatycznego reconnectu, ponieważ wymaga nowego kodu od prowadzącego.
+Klient WWW wspiera kontrakt PeerJS v4 i minimalny build ustawiony w `src/config/hostCompatibility.ts`. Nie ma cichego downgrade'u do v3 ani nieuwierzytelnionego transportu.
 
-Bezpieczna kolejność wdrożenia to najpierw klient WWW v4, a następnie host Android v4. Nie ma cichego downgrade'u. Tryb LAN/hotspot aplikacji Android pozostaje niezależny.
+Krótki kod oraz zgodne pełne credentials `PM4-...` prowadzą do tego samego kontraktu v4. LAN/hotspot aplikacji Android pozostaje niezależnym transportem.
 
 ## Reconnect i Safari
 
@@ -106,7 +134,7 @@ Klient obsługuje:
 11. reset do kolejnej gry,
 12. odtworzenie właściwego ekranu z `game:snapshot` po reconnect.
 
-W aktualnym protokole MVP wyłącznie host Android może oceniać odpowiedzi oraz kończyć etap oceny. Klient WWW nie wysyła `countries-cities:vote` ani nie udaje głosowania graczy.
+W aktualnym protokole wyłącznie host Android może oceniać odpowiedzi oraz kończyć etap oceny. Klient WWW nie wysyła `countries-cities:vote` ani nie duplikuje silnika gry.
 
 ## GitHub Pages
 
@@ -133,7 +161,7 @@ Dla `https://USERNAME.github.io/REPOSITORY/`:
 VITE_BASE_PATH=/REPOSITORY/ npm run build
 ```
 
-Bez dodatkowej konfiguracji workflow automatycznie używa `/<nazwa-repozytorium>/`, dlatego projekt działa pod standardowym adresem GitHub Pages. Po ustawieniu własnej domeny należy dodać w **Settings → Secrets and variables → Actions → Variables** zmienną `VITE_BASE_PATH` o wartości `/`.
+Bez dodatkowej konfiguracji workflow automatycznie używa `/<nazwa-repozytorium>/`. Po ustawieniu własnej domeny należy dodać w **Settings → Secrets and variables → Actions → Variables** zmienną `VITE_BASE_PATH` o wartości `/`.
 
 ## Własna domena i Cloudflare
 
@@ -142,7 +170,7 @@ Bez dodatkowej konfiguracji workflow automatycznie używa `/<nazwa-repozytorium>
 3. W Cloudflare dodaj rekord `CNAME` dla wybranej subdomeny wskazujący na `USERNAME.github.io`.
 4. W GitHub włącz **Enforce HTTPS**, gdy certyfikat będzie gotowy.
 5. W Cloudflare ustaw SSL/TLS na **Full** lub **Full (strict)**, gdy origin i konfiguracja domeny na to pozwalają.
-6. Plik `public/CNAME.example` jest wyłącznie wzorem na przyszłość; nie jest używany przy obecnej publikacji pod `github.io`.
+6. Plik `public/CNAME.example` jest wyłącznie wzorem na przyszłość.
 
 Cloudflare pełni tu wyłącznie rolę DNS/proxy/HTTPS. Nie przechowuje stanu gry i nie uruchamia logiki multiplayer.
 
@@ -159,15 +187,14 @@ Następnie:
 
 1. uruchom aplikację Android,
 2. utwórz pokój online,
-3. otwórz panel QR,
-4. zeskanuj link drugim urządzeniem,
-5. wpisz nazwę i dołącz,
-6. ustaw gotowość,
-7. rozpocznij rundę na hoście,
-8. wpisz i wyślij odpowiedzi w przeglądarce,
-9. przejdź ocenianie i wyniki,
-10. na chwilę wyłącz internet albo uśpij Safari,
-11. przywróć sieć i sprawdź reconnect oraz odtworzenie ekranu ze snapshotu.
+3. odczytaj 6-znakowy kod albo zeskanuj QR drugim urządzeniem,
+4. wpisz nazwę i dołącz,
+5. ustaw gotowość,
+6. rozpocznij rundę na hoście,
+7. wpisz i wyślij odpowiedzi w przeglądarce,
+8. przejdź ocenianie i wyniki,
+9. na chwilę wyłącz internet albo uśpij Safari,
+10. przywróć sieć i sprawdź reconnect oraz odtworzenie ekranu ze snapshotu.
 
 ## Ograniczenia P2P
 
