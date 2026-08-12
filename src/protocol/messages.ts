@@ -189,6 +189,13 @@ export interface CountriesCitiesWheelSpinHoldStartedMessage extends MessageMetad
   spinId: string;
   holdId: string;
 }
+export interface CountriesCitiesWheelSpinHoldCancelledMessage extends MessageMetadata {
+  type: 'player:wheelSpinHoldCancelled';
+  hostSessionId: string;
+  roundNumber: number;
+  spinId: string;
+  holdId: string;
+}
 export interface CountriesCitiesStartWheelSpinMessage extends MessageMetadata {
   type: 'player:startWheelSpin';
   hostSessionId: string;
@@ -197,4 +204,4 @@ export interface CountriesCitiesStartWheelSpinMessage extends MessageMetadata {
   holdDurationMs?: number;
   holdId?: string;
 }
-export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage | CountriesCitiesWheelSpinHoldStartedMessage | CountriesCitiesStartWheelSpinMessage;
+export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage | CountriesCitiesWheelSpinHoldStartedMessage | CountriesCitiesWheelSpinHoldCancelledMessage | CountriesCitiesStartWheelSpinMessage;

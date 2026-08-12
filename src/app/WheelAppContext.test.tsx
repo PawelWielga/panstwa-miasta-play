@@ -198,6 +198,26 @@ describe('AppProvider synchronized wheel intent', () => {
     act(() => {
       actions.startWheelSpinHold();
       actions.cancelWheelSpinHold();
+      actions.cancelWheelSpinHold();
+    });
+    const holdMessage = transport.send.mock.calls
+      .map(([message]) => message)
+      .find((message) => message.type === 'player:wheelSpinHoldStarted');
+    const cancelMessages = transport.send.mock.calls
+      .map(([message]) => message)
+      .filter((message) => message.type === 'player:wheelSpinHoldCancelled');
+    expect(holdMessage).toBeDefined();
+    expect(cancelMessages).toHaveLength(1);
+    if (!holdMessage) {
+      throw new Error('Expected wheel hold message.');
+    }
+    expect(cancelMessages[0]).toMatchObject({
+      type: 'player:wheelSpinHoldCancelled',
+      senderId: currentState.identity.playerId,
+      hostSessionId: waiting.hostSessionId,
+      roundNumber: waiting.roundNumber,
+      spinId: waiting.spinId,
+      holdId: holdMessage.holdId,
     });
 
     dateNow.mockReturnValue(baseNow + 200);

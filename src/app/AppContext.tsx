@@ -20,8 +20,8 @@ import { isHostVersionUnsupportedError } from '../config/hostCompatibility';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
 import { isTerminalJoinError } from '../protocol/gameErrors';
 import { connectionFailureCodes } from '../protocol/connectionFailure';
-import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createStartWheelSpin, createSubmit, createWheelSpinHoldStarted } from '../protocol/outgoing';
-import type { ClientMessage, HostMessage } from '../protocol/messages';
+import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createStartWheelSpin, createSubmit, createWheelSpinHoldCancelled, createWheelSpinHoldStarted } from '../protocol/outgoing';
+import type { ClientMessage, CountriesCitiesWheelState, HostMessage } from '../protocol/messages';
 import { wheelSpinRequestKey } from '../protocol/wheel';
 import { isPeerJsAuthenticationError, PeerJsGameTransport } from '../peer/PeerJsGameTransport';
 import { canAutoReconnect, reconnectDelay } from '../peer/reconnectPolicy';
@@ -81,7 +81,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     lastPersistAttemptAt: 0,
     storageUnavailable: false,
   });
-  const wheelSpinHoldRef = useRef<{ key: string; holdId: string } | null>(null);
+  const wheelSpinHoldRef = useRef<{ key: string; holdId: string; wheelState: CountriesCitiesWheelState } | null>(null);
   const factoryRef = useRef(transportFactory);
   const connectInternalRef = useRef<(parameters: JoinParameters, reconnecting: boolean) => Promise<void>>(() => Promise.resolve());
   useEffect(() => { stateRef.current = state; }, [state]);
@@ -616,10 +616,19 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       if (current.pendingWheelSpinRequestKey === key || wheelSpinHoldRef.current?.key === key) return;
       const message = createWheelSpinHoldStarted(current.identity.playerId, wheelState);
       if (!send(message)) return;
-      wheelSpinHoldRef.current = { key, holdId: message.holdId };
+      wheelSpinHoldRef.current = { key, holdId: message.holdId, wheelState };
     },
     cancelWheelSpinHold: () => {
+      const activeHold = wheelSpinHoldRef.current;
       wheelSpinHoldRef.current = null;
+      if (!activeHold) return;
+      const current = stateRef.current;
+      if (current.connectionStatus !== 'connected') return;
+      send(createWheelSpinHoldCancelled(
+        current.identity.playerId,
+        activeHold.wheelState,
+        activeHold.holdId,
+      ));
     },
     startWheelSpin: (holdDurationMs) => {
       const current = stateRef.current;

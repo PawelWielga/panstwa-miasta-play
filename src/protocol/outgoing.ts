@@ -1,5 +1,5 @@
 import { SUPPORTED_GAME_PROTOCOL_VERSION } from './constants';
-import type { ClientMessage, CountriesCitiesWheelSpinHoldStartedMessage, CountriesCitiesWheelState, PlayerProfile } from './messages';
+import type { ClientMessage, CountriesCitiesWheelSpinHoldCancelledMessage, CountriesCitiesWheelSpinHoldStartedMessage, CountriesCitiesWheelState, PlayerProfile } from './messages';
 import { generateRequestId } from '../utils/ids';
 
 export interface IdentityCredentials { profile: PlayerProfile; reconnectToken: string }
@@ -33,6 +33,20 @@ export function createWheelSpinHoldStarted(
     roundNumber: wheelState.roundNumber,
     spinId: wheelState.spinId,
     holdId: generateRequestId(),
+    ...meta(playerId),
+  };
+}
+export function createWheelSpinHoldCancelled(
+  playerId: string,
+  wheelState: CountriesCitiesWheelState,
+  holdId: string,
+): CountriesCitiesWheelSpinHoldCancelledMessage {
+  return {
+    type: 'player:wheelSpinHoldCancelled',
+    hostSessionId: wheelState.hostSessionId,
+    roundNumber: wheelState.roundNumber,
+    spinId: wheelState.spinId,
+    holdId,
     ...meta(playerId),
   };
 }
