@@ -46,7 +46,6 @@ function SynchronizedWheelScreen({ wheelState, state, startWheelSpin }: Synchron
   const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>): void => {
     if (!canStart || event.button !== 0 || holdGesture.current !== null) return;
     holdGesture.current = { pointerId: event.pointerId, startedAt: event.timeStamp };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
   };
   const handlePointerUp = (event: ReactPointerEvent<HTMLButtonElement>): void => {
     const gesture = holdGesture.current;
