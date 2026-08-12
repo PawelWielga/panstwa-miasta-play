@@ -6,6 +6,9 @@ import { wheelSpinRequestKey } from '../../protocol/wheel';
 import type { CountriesCitiesWheelState } from '../../protocol/messages';
 import { FortuneWheel } from './FortuneWheel';
 
+const MAX_WHEEL_HOLD_DURATION_MS = 2_000;
+const WHEEL_HOLD_PROGRESS_INTERVAL_MS = 50;
+
 export function TransitionScreen() {
   const { state, actions } = useApp();
   const wheelState = state.snapshot?.wheelState;
@@ -13,6 +16,7 @@ export function TransitionScreen() {
 
   return (
     <SynchronizedWheelScreen
+      key={wheelState.spinId}
       wheelState={wheelState}
       state={state}
       startWheelSpinHold={actions.startWheelSpinHold}
@@ -46,7 +50,9 @@ function SynchronizedWheelScreen({
   const requestPending = state.pendingWheelSpinRequestKey === wheelSpinRequestKey(wheelState);
   const holdGesture = useRef<{ pointerId: number; startedAt: number } | null>(null);
   const pendingHoldDurationMs = useRef<number | undefined>(undefined);
+  const holdStrengthTimer = useRef<number | null>(null);
   const [holding, setHolding] = useState(false);
+  const [holdStrengthPercent, setHoldStrengthPercent] = useState(0);
   const canStart = wheelState.phase === 'waiting'
     && isSelectedPlayer
     && state.connectionStatus === 'connected'
@@ -59,10 +65,38 @@ function SynchronizedWheelScreen({
     && !requestPending;
   const status = wheelStatus(wheelState, selectedPlayerName, isSelectedPlayer, requestPending, remainingSeconds);
 
+  const stopHoldStrengthTimer = (): void => {
+    if (holdStrengthTimer.current === null) return;
+    window.clearInterval(holdStrengthTimer.current);
+    holdStrengthTimer.current = null;
+  };
+  const resetHoldStrength = (): void => {
+    stopHoldStrengthTimer();
+    setHoldStrengthPercent(0);
+  };
+  const startHoldStrength = (): void => {
+    stopHoldStrengthTimer();
+    const startedAt = Date.now();
+    setHoldStrengthPercent(0);
+    holdStrengthTimer.current = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const percent = Math.min(100, Math.round(elapsed * 100 / MAX_WHEEL_HOLD_DURATION_MS));
+      setHoldStrengthPercent(percent);
+      if (percent >= 100) stopHoldStrengthTimer();
+    }, WHEEL_HOLD_PROGRESS_INTERVAL_MS);
+  };
+
+  useEffect(() => () => {
+    if (holdStrengthTimer.current !== null) {
+      window.clearInterval(holdStrengthTimer.current);
+    }
+  }, []);
+
   const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>): void => {
     if (!canStart || event.button !== 0 || holdGesture.current !== null) return;
     holdGesture.current = { pointerId: event.pointerId, startedAt: event.timeStamp };
     setHolding(true);
+    startHoldStrength();
     startWheelSpinHold();
   };
   const handlePointerUp = (event: ReactPointerEvent<HTMLButtonElement>): void => {
@@ -71,20 +105,23 @@ function SynchronizedWheelScreen({
     holdGesture.current = null;
     pendingHoldDurationMs.current = Math.max(
       0,
-      Math.min(2_000, Math.round(event.timeStamp - gesture.startedAt)),
+      Math.min(MAX_WHEEL_HOLD_DURATION_MS, Math.round(event.timeStamp - gesture.startedAt)),
     );
+    stopHoldStrengthTimer();
   };
   const handlePointerCancel = (event: ReactPointerEvent<HTMLButtonElement>): void => {
     if (holdGesture.current?.pointerId !== event.pointerId) return;
     holdGesture.current = null;
     pendingHoldDurationMs.current = undefined;
     setHolding(false);
+    resetHoldStrength();
     cancelWheelSpinHold();
   };
   const handleClick = (): void => {
     const holdDurationMs = pendingHoldDurationMs.current;
     pendingHoldDurationMs.current = undefined;
     setHolding(false);
+    resetHoldStrength();
     startWheelSpin(holdDurationMs);
   };
 
@@ -115,6 +152,25 @@ function SynchronizedWheelScreen({
             >
               {requestPending ? 'Czekamy na hosta…' : 'Zakręć kołem'}
             </button>
+            {holding && (
+              <div
+                className="fortune-wheel-strength"
+                role="progressbar"
+                aria-label="Siła obrotu"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={holdStrengthPercent}
+                aria-valuetext={`${String(holdStrengthPercent)}%`}
+              >
+                <div className="fortune-wheel-strength-track" aria-hidden="true">
+                  <div
+                    className="fortune-wheel-strength-fill"
+                    style={{ width: `${String(holdStrengthPercent)}%` }}
+                  />
+                </div>
+                <span>Siła obrotu: {holdStrengthPercent}%</span>
+              </div>
+            )}
             {requestPending && <p className="fortune-wheel-request-note">Prośba została wysłana tylko raz.</p>}
           </div>
         )}

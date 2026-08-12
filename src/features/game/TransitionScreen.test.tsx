@@ -73,6 +73,38 @@ describe('TransitionScreen synchronized wheel', () => {
     expect(actions.startWheelSpin).toHaveBeenCalledWith(expect.any(Number));
   });
 
+  it('shows hold strength and caps it at 100 percent', () => {
+    vi.useFakeTimers();
+    try {
+      const actions = appActions();
+      mocked.value = {
+        state: appState({ snapshot: snapshot(waitingWheel), currentLetter: 'Z' }),
+        actions,
+      };
+      render(<TransitionScreen />);
+
+      const button = screen.getByRole('button', { name: 'Zakręć kołem' });
+      fireEvent.pointerDown(button, { pointerId: 17, button: 0, timeStamp: 1_000 });
+      const strength = screen.getByRole('progressbar', { name: 'Siła obrotu' });
+      expect(strength).toHaveAttribute('aria-valuenow', '0');
+
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+      expect(strength).toHaveAttribute('aria-valuenow', '50');
+
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+      expect(strength).toHaveAttribute('aria-valuenow', '100');
+
+      fireEvent.pointerCancel(button, { pointerId: 17, button: 0, timeStamp: 4_000 });
+      expect(screen.queryByRole('progressbar', { name: 'Siła obrotu' })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('cancels an announced hold when the pointer gesture is cancelled', () => {
     const actions = appActions();
     mocked.value = {
