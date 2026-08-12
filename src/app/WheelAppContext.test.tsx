@@ -154,7 +154,7 @@ describe('AppProvider synchronized wheel intent', () => {
       .map(([message]) => message)
       .find((message) => message.type === 'player:wheelSpinHoldStarted');
     expect(holdMessage).toBeDefined();
-    if (!holdMessage || holdMessage.type !== 'player:wheelSpinHoldStarted') {
+    if (!holdMessage) {
       throw new Error('Expected wheel hold message.');
     }
 
