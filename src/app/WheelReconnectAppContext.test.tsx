@@ -132,6 +132,8 @@ describe('AppProvider wheel reconnect continuity', () => {
 
     act(() => {
       firstTransport.emitMessage({ type: 'game:snapshot', snapshot: snapshot(1, waiting) });
+    });
+    act(() => {
       actions.startWheelSpinHold();
     });
 
@@ -155,6 +157,8 @@ describe('AppProvider wheel reconnect continuity', () => {
 
     act(() => {
       reconnectedTransport.emitMessage({ type: 'game:snapshot', snapshot: snapshot(2, waiting) });
+    });
+    act(() => {
       actions.startWheelSpin(1_250);
     });
 
