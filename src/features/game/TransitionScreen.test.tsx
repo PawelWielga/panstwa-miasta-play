@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TransitionScreen } from './TransitionScreen';
@@ -53,6 +53,23 @@ describe('TransitionScreen synchronized wheel', () => {
     expect(screen.getByRole('img', { name: 'Koło fortuny. Wynik jest ukryty.' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Zakręć kołem' }));
     expect(actions.startWheelSpin).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes pointer hold duration when the selected player releases the button', () => {
+    const actions = appActions();
+    mocked.value = {
+      state: appState({ snapshot: snapshot(waitingWheel), currentLetter: 'Z' }),
+      actions,
+    };
+    render(<TransitionScreen />);
+
+    const button = screen.getByRole('button', { name: 'Zakręć kołem' });
+    fireEvent.pointerDown(button, { pointerId: 7, button: 0, timeStamp: 1_000 });
+    fireEvent.pointerUp(button, { pointerId: 7, button: 0, timeStamp: 2_250 });
+    fireEvent.click(button);
+
+    expect(actions.startWheelSpin).toHaveBeenCalledTimes(1);
+    expect(actions.startWheelSpin).toHaveBeenCalledWith(expect.any(Number));
   });
 
   it('does not reveal snapshot round letter while the wheel is waiting', () => {

@@ -43,7 +43,7 @@ export interface AppActions {
   cancel: () => void;
   retry: () => void;
   toggleReady: () => void;
-  startWheelSpin: () => void;
+  startWheelSpin: (holdDurationMs?: number) => void;
   setAnswer: (categoryId: string, value: string) => void;
   submitAnswers: () => void;
   editAnswers: () => void;
@@ -599,7 +599,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       send(createGameReady(stateRef.current.identity.playerId, next));
       dispatch({ type: 'ready', value: next });
     },
-    startWheelSpin: () => {
+    startWheelSpin: (holdDurationMs) => {
       const current = stateRef.current;
       const wheelState = current.snapshot?.wheelState;
       if (current.connectionStatus !== 'connected'
@@ -611,7 +611,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       if (current.pendingWheelSpinRequestKey === key) return;
       stateRef.current = { ...current, pendingWheelSpinRequestKey: key };
       dispatch({ type: 'wheel-spin-requested', key });
-      send(createStartWheelSpin(current.identity.playerId, wheelState));
+      send(createStartWheelSpin(current.identity.playerId, wheelState, holdDurationMs));
     },
     setAnswer: (categoryId, value) => dispatch({ type: 'answer', categoryId, value }),
     submitAnswers: () => {

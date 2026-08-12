@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useApp } from '../../app/AppContext';
 import { ConnectionBanner } from '../../components/ConnectionBanner';
 import { Card, Layout } from '../../components/Layout';
@@ -23,7 +23,7 @@ export function TransitionScreen() {
 interface SynchronizedWheelScreenProps {
   wheelState: CountriesCitiesWheelState;
   state: ReturnType<typeof useApp>['state'];
-  startWheelSpin: () => void;
+  startWheelSpin: (holdDurationMs?: number) => void;
 }
 
 function SynchronizedWheelScreen({ wheelState, state, startWheelSpin }: SynchronizedWheelScreenProps) {
@@ -34,12 +34,39 @@ function SynchronizedWheelScreen({ wheelState, state, startWheelSpin }: Synchron
   const remainingMilliseconds = wheelState.waitingDeadlineAt - now;
   const remainingSeconds = remainingMilliseconds <= 0 ? 0 : Math.ceil(remainingMilliseconds / 1000);
   const requestPending = state.pendingWheelSpinRequestKey === wheelSpinRequestKey(wheelState);
+  const holdGesture = useRef<{ pointerId: number; startedAt: number } | null>(null);
+  const pendingHoldDurationMs = useRef<number | undefined>(undefined);
   const canStart = wheelState.phase === 'waiting'
     && isSelectedPlayer
     && state.connectionStatus === 'connected'
     && !requestPending
     && remainingMilliseconds > 0;
   const status = wheelStatus(wheelState, selectedPlayerName, isSelectedPlayer, requestPending, remainingSeconds);
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>): void => {
+    if (!canStart || event.button !== 0 || holdGesture.current !== null) return;
+    holdGesture.current = { pointerId: event.pointerId, startedAt: event.timeStamp };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+  const handlePointerUp = (event: ReactPointerEvent<HTMLButtonElement>): void => {
+    const gesture = holdGesture.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    holdGesture.current = null;
+    pendingHoldDurationMs.current = Math.max(
+      0,
+      Math.min(2_000, Math.round(event.timeStamp - gesture.startedAt)),
+    );
+  };
+  const handlePointerCancel = (event: ReactPointerEvent<HTMLButtonElement>): void => {
+    if (holdGesture.current?.pointerId !== event.pointerId) return;
+    holdGesture.current = null;
+    pendingHoldDurationMs.current = undefined;
+  };
+  const handleClick = (): void => {
+    const holdDurationMs = pendingHoldDurationMs.current;
+    pendingHoldDurationMs.current = undefined;
+    startWheelSpin(holdDurationMs);
+  };
 
   return (
     <Layout>
@@ -60,7 +87,10 @@ function SynchronizedWheelScreen({ wheelState, state, startWheelSpin }: Synchron
             <button
               type="button"
               className="button button-primary button-large"
-              onClick={startWheelSpin}
+              onPointerDown={handlePointerDown}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
+              onClick={handleClick}
               disabled={!canStart}
             >
               {requestPending ? 'Czekamy na hosta…' : 'Zakręć kołem'}
@@ -123,7 +153,7 @@ function wheelStatus(
         title: 'Twoja kolej',
         description: requestPending
           ? 'Wysłano prośbę. Koło ruszy po potwierdzeniu hosta.'
-          : `Naciśnij „Zakręć kołem”. Jeśli nie zdążysz, host uruchomi je automatycznie za ${String(remainingSeconds)} s.`,
+          : `Przytrzymaj „Zakręć kołem” i puść. Dłuższe przytrzymanie daje mocniejszy obrót. Auto-start za ${String(remainingSeconds)} s.`,
       };
     }
     return {
