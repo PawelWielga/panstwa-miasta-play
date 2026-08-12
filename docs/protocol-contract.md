@@ -504,3 +504,12 @@ Klient potrafi zwalidować wiadomość hosta, ale sam nie wysyła głosów.
 - rozmiar jest sprawdzany przed parsowaniem i przed wysłaniem,
 - tekst jest renderowany przez React bez wstrzykiwania HTML,
 - host Android jest jedynym źródłem wyników i faz gry.
+
+## Koło fortuny: przytrzymanie przy granicy timeoutu
+
+Klient WWW opcjonalnie wysyła `player:wheelSpinHoldStarted` w chwili rozpoczęcia przytrzymania przycisku. Wiadomość zawiera `hostSessionId`, `roundNumber`, `spinId` oraz losowy `holdId`. Późniejszy `player:startWheelSpin` przekazuje ten sam opcjonalny `holdId` razem z `holdDurationMs`.
+
+Android pozostaje źródłem prawdy. Host ocenia, czy przytrzymanie rozpoczęło się przed `waitingDeadlineAt`, na podstawie własnego czasu odbioru wiadomości i nie ufa `sentAt` klienta. Pasujące puszczenie może zostać zaakceptowane po podstawowym 10-sekundowym terminie tylko w ograniczonym oknie odpowiadającym maksymalnemu 2-sekundowemu przytrzymaniu oraz 1 sekundzie zapasu sieciowego. Jeśli gest zostanie porzucony, host uruchomi automatyczny fallback po tym ograniczonym oknie.
+
+Zmiana jest kompatybilna wstecznie: starszy host ignoruje nieznany `player:wheelSpinHoldStarted`, a dodatkowe pole `holdId` w `player:startWheelSpin` jest opcjonalne. Zwolnienie przycisku przed deadlinem zachowuje dotychczasowe działanie także ze starszym hostem.
+

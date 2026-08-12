@@ -68,8 +68,58 @@ describe('TransitionScreen synchronized wheel', () => {
     fireEvent.pointerUp(button, { pointerId: 7, button: 0, timeStamp: 2_250 });
     fireEvent.click(button);
 
+    expect(actions.startWheelSpinHold).toHaveBeenCalledTimes(1);
     expect(actions.startWheelSpin).toHaveBeenCalledTimes(1);
     expect(actions.startWheelSpin).toHaveBeenCalledWith(expect.any(Number));
+  });
+
+  it('cancels an announced hold when the pointer gesture is cancelled', () => {
+    const actions = appActions();
+    mocked.value = {
+      state: appState({ snapshot: snapshot(waitingWheel), currentLetter: 'Z' }),
+      actions,
+    };
+    render(<TransitionScreen />);
+
+    const button = screen.getByRole('button', { name: 'Zakręć kołem' });
+    fireEvent.pointerDown(button, { pointerId: 8, button: 0, timeStamp: 1_000 });
+    fireEvent.pointerCancel(button, { pointerId: 8, button: 0, timeStamp: 1_500 });
+
+    expect(actions.startWheelSpinHold).toHaveBeenCalledTimes(1);
+    expect(actions.cancelWheelSpinHold).toHaveBeenCalledTimes(1);
+    expect(actions.startWheelSpin).not.toHaveBeenCalled();
+  });
+
+  it('keeps an in-progress hold releasable when the base deadline passes', () => {
+    const baseNow = 1_000_000;
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(baseNow);
+    const visibilityState = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const actions = appActions();
+    const wheel = {
+      ...waitingWheel,
+      waitingStartedAt: baseNow - 9_000,
+      waitingDeadlineAt: baseNow + 100,
+    };
+    mocked.value = {
+      state: appState({ snapshot: snapshot(wheel), currentLetter: 'Z' }),
+      actions,
+    };
+    render(<TransitionScreen />);
+
+    const button = screen.getByRole('button', { name: 'Zakręć kołem' });
+    fireEvent.pointerDown(button, { pointerId: 9, button: 0, timeStamp: 1_000 });
+    dateNow.mockReturnValue(baseNow + 200);
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(button).not.toBeDisabled();
+    fireEvent.pointerUp(button, { pointerId: 9, button: 0, timeStamp: 2_000 });
+    fireEvent.click(button);
+
+    expect(actions.startWheelSpinHold).toHaveBeenCalledTimes(1);
+    expect(actions.startWheelSpin).toHaveBeenCalledTimes(1);
+    visibilityState.mockRestore();
+    dateNow.mockRestore();
   });
 
   it('does not reveal snapshot round letter while the wheel is waiting', () => {

@@ -15,6 +15,8 @@ export function TransitionScreen() {
     <SynchronizedWheelScreen
       wheelState={wheelState}
       state={state}
+      startWheelSpinHold={actions.startWheelSpinHold}
+      cancelWheelSpinHold={actions.cancelWheelSpinHold}
       startWheelSpin={actions.startWheelSpin}
     />
   );
@@ -23,10 +25,18 @@ export function TransitionScreen() {
 interface SynchronizedWheelScreenProps {
   wheelState: CountriesCitiesWheelState;
   state: ReturnType<typeof useApp>['state'];
+  startWheelSpinHold: () => void;
+  cancelWheelSpinHold: () => void;
   startWheelSpin: (holdDurationMs?: number) => void;
 }
 
-function SynchronizedWheelScreen({ wheelState, state, startWheelSpin }: SynchronizedWheelScreenProps) {
+function SynchronizedWheelScreen({
+  wheelState,
+  state,
+  startWheelSpinHold,
+  cancelWheelSpinHold,
+  startWheelSpin,
+}: SynchronizedWheelScreenProps) {
   const now = useWaitingClock(wheelState);
   const selectedPlayer = state.players.find((player) => player.id === wheelState.selectedPlayerId);
   const selectedPlayerName = selectedPlayer?.name.trim() || 'wybrany gracz';
@@ -36,16 +46,24 @@ function SynchronizedWheelScreen({ wheelState, state, startWheelSpin }: Synchron
   const requestPending = state.pendingWheelSpinRequestKey === wheelSpinRequestKey(wheelState);
   const holdGesture = useRef<{ pointerId: number; startedAt: number } | null>(null);
   const pendingHoldDurationMs = useRef<number | undefined>(undefined);
+  const [holding, setHolding] = useState(false);
   const canStart = wheelState.phase === 'waiting'
     && isSelectedPlayer
     && state.connectionStatus === 'connected'
     && !requestPending
     && remainingMilliseconds > 0;
+  const canReleaseHold = holding
+    && wheelState.phase === 'waiting'
+    && isSelectedPlayer
+    && state.connectionStatus === 'connected'
+    && !requestPending;
   const status = wheelStatus(wheelState, selectedPlayerName, isSelectedPlayer, requestPending, remainingSeconds);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>): void => {
     if (!canStart || event.button !== 0 || holdGesture.current !== null) return;
     holdGesture.current = { pointerId: event.pointerId, startedAt: event.timeStamp };
+    setHolding(true);
+    startWheelSpinHold();
   };
   const handlePointerUp = (event: ReactPointerEvent<HTMLButtonElement>): void => {
     const gesture = holdGesture.current;
@@ -60,10 +78,13 @@ function SynchronizedWheelScreen({ wheelState, state, startWheelSpin }: Synchron
     if (holdGesture.current?.pointerId !== event.pointerId) return;
     holdGesture.current = null;
     pendingHoldDurationMs.current = undefined;
+    setHolding(false);
+    cancelWheelSpinHold();
   };
   const handleClick = (): void => {
     const holdDurationMs = pendingHoldDurationMs.current;
     pendingHoldDurationMs.current = undefined;
+    setHolding(false);
     startWheelSpin(holdDurationMs);
   };
 
@@ -90,7 +111,7 @@ function SynchronizedWheelScreen({ wheelState, state, startWheelSpin }: Synchron
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerCancel}
               onClick={handleClick}
-              disabled={!canStart}
+              disabled={!canStart && !canReleaseHold}
             >
               {requestPending ? 'Czekamy na hosta…' : 'Zakręć kołem'}
             </button>

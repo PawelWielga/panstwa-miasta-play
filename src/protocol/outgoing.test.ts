@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SUPPORTED_GAME_PROTOCOL_VERSION } from './constants';
-import { createPlayerHello, createRejoin, createStartWheelSpin } from './outgoing';
+import { createPlayerHello, createRejoin, createStartWheelSpin, createWheelSpinHoldStarted } from './outgoing';
 
 const profile = { id: 'player-1', name: 'Ala', color: '#6d4aff', emoji: '🦊' };
 
@@ -32,8 +32,17 @@ describe('wheel intent', () => {
       waitingStartedAt: 1_000,
       waitingDeadlineAt: 11_000,
     };
-    const message = createStartWheelSpin(profile.id, wheelState, 1250);
+    const holdMessage = createWheelSpinHoldStarted(profile.id, wheelState);
+    const message = createStartWheelSpin(profile.id, wheelState, 1250, holdMessage.holdId);
 
+    expect(holdMessage).toMatchObject({
+      type: 'player:wheelSpinHoldStarted',
+      senderId: profile.id,
+      hostSessionId: 'session-1',
+      roundNumber: 3,
+      spinId: 'spin-3',
+    });
+    expect(holdMessage.holdId).not.toBe('');
     expect(message).toMatchObject({
       type: 'player:startWheelSpin',
       senderId: profile.id,
@@ -41,6 +50,7 @@ describe('wheel intent', () => {
       roundNumber: 3,
       spinId: 'spin-3',
       holdDurationMs: 1250,
+      holdId: holdMessage.holdId,
     });
     expect(message).toHaveProperty('requestId');
     expect(message).toHaveProperty('sentAt');

@@ -123,4 +123,91 @@ describe('AppProvider synchronized wheel intent', () => {
     });
     expect(currentState.pendingWheelSpinRequestKey).toBeNull();
   });
+
+  it('links a hold started before the deadline to a release after it', async () => {
+    const transport = new WheelTransport();
+    render(<AppProvider transportFactory={() => transport}><Harness /></AppProvider>);
+    await act(async () => {
+      await actions.connect(joinParameters);
+    });
+
+    const baseNow = 1_000_000;
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(baseNow);
+    const waiting: CountriesCitiesWheelState = {
+      schemaVersion: 1,
+      phase: 'waiting',
+      hostSessionId: 'session-1',
+      roundNumber: 1,
+      spinId: 'spin-hold',
+      selectedPlayerId: currentState.identity.playerId,
+      waitingStartedAt: baseNow - 9_000,
+      waitingDeadlineAt: baseNow + 100,
+    };
+    act(() => {
+      transport.emitMessage({ type: 'game:snapshot', snapshot: snapshot(10, waiting) });
+    });
+    act(() => {
+      actions.startWheelSpinHold();
+    });
+
+    const holdMessage = transport.send.mock.calls
+      .map(([message]) => message)
+      .find((message) => message.type === 'player:wheelSpinHoldStarted');
+    expect(holdMessage).toBeDefined();
+    if (!holdMessage || holdMessage.type !== 'player:wheelSpinHoldStarted') {
+      throw new Error('Expected wheel hold message.');
+    }
+
+    dateNow.mockReturnValue(baseNow + 200);
+    act(() => {
+      actions.startWheelSpin(1_250);
+    });
+    const startMessage = transport.send.mock.calls
+      .map(([message]) => message)
+      .find((message) => message.type === 'player:startWheelSpin');
+    expect(startMessage).toMatchObject({
+      type: 'player:startWheelSpin',
+      holdDurationMs: 1_250,
+      holdId: holdMessage.holdId,
+    });
+    dateNow.mockRestore();
+  });
+
+  it('does not release after the deadline once the local hold was cancelled', async () => {
+    const transport = new WheelTransport();
+    render(<AppProvider transportFactory={() => transport}><Harness /></AppProvider>);
+    await act(async () => {
+      await actions.connect(joinParameters);
+    });
+
+    const baseNow = 2_000_000;
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(baseNow);
+    const waiting: CountriesCitiesWheelState = {
+      schemaVersion: 1,
+      phase: 'waiting',
+      hostSessionId: 'session-1',
+      roundNumber: 1,
+      spinId: 'spin-cancelled-hold',
+      selectedPlayerId: currentState.identity.playerId,
+      waitingStartedAt: baseNow - 9_000,
+      waitingDeadlineAt: baseNow + 100,
+    };
+    act(() => {
+      transport.emitMessage({ type: 'game:snapshot', snapshot: snapshot(20, waiting) });
+    });
+    act(() => {
+      actions.startWheelSpinHold();
+      actions.cancelWheelSpinHold();
+    });
+
+    dateNow.mockReturnValue(baseNow + 200);
+    act(() => {
+      actions.startWheelSpin(500);
+    });
+    expect(
+      transport.send.mock.calls.filter(([message]) => message.type === 'player:startWheelSpin'),
+    ).toHaveLength(0);
+    dateNow.mockRestore();
+  });
+
 });

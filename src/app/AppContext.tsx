@@ -20,7 +20,7 @@ import { isHostVersionUnsupportedError } from '../config/hostCompatibility';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
 import { isTerminalJoinError } from '../protocol/gameErrors';
 import { connectionFailureCodes } from '../protocol/connectionFailure';
-import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createStartWheelSpin, createSubmit } from '../protocol/outgoing';
+import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createStartWheelSpin, createSubmit, createWheelSpinHoldStarted } from '../protocol/outgoing';
 import type { ClientMessage, HostMessage } from '../protocol/messages';
 import { wheelSpinRequestKey } from '../protocol/wheel';
 import { isPeerJsAuthenticationError, PeerJsGameTransport } from '../peer/PeerJsGameTransport';
@@ -43,6 +43,8 @@ export interface AppActions {
   cancel: () => void;
   retry: () => void;
   toggleReady: () => void;
+  startWheelSpinHold: () => void;
+  cancelWheelSpinHold: () => void;
   startWheelSpin: (holdDurationMs?: number) => void;
   setAnswer: (categoryId: string, value: string) => void;
   submitAnswers: () => void;
@@ -79,27 +81,30 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     lastPersistAttemptAt: 0,
     storageUnavailable: false,
   });
+  const wheelSpinHoldRef = useRef<{ key: string; holdId: string } | null>(null);
   const factoryRef = useRef(transportFactory);
   const connectInternalRef = useRef<(parameters: JoinParameters, reconnecting: boolean) => Promise<void>>(() => Promise.resolve());
   useEffect(() => { stateRef.current = state; }, [state]);
 
-  const send = useCallback((message: ClientMessage): void => {
+  const send = useCallback((message: ClientMessage): boolean => {
     const transport = transportRef.current;
     if (!transport) {
       recordConnectionDiagnostic('client-message.skipped', 'warning', { messageType: message.type, reason: 'transport-unavailable' });
-      return;
+      return false;
     }
     if (message.type !== 'client:heartbeat') {
       recordConnectionDiagnostic('client-message.send', 'info', { messageType: message.type });
     }
     try {
       transport.send(message);
+      return true;
     } catch (error) {
       recordConnectionDiagnostic('client-message.send.failed', 'error', {
         messageType: message.type,
         ...getDiagnosticErrorDetails(error),
       });
       dispatch({ type: 'connection', status: 'error', error: connectionFailureCodes.gameConnectionLost });
+      return false;
     }
   }, []);
 
@@ -599,7 +604,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       send(createGameReady(stateRef.current.identity.playerId, next));
       dispatch({ type: 'ready', value: next });
     },
-    startWheelSpin: (holdDurationMs) => {
+    startWheelSpinHold: () => {
       const current = stateRef.current;
       const wheelState = current.snapshot?.wheelState;
       if (current.connectionStatus !== 'connected'
@@ -608,10 +613,29 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         || wheelState.selectedPlayerId !== current.identity.playerId
         || Date.now() >= wheelState.waitingDeadlineAt) return;
       const key = wheelSpinRequestKey(wheelState);
+      if (current.pendingWheelSpinRequestKey === key || wheelSpinHoldRef.current?.key === key) return;
+      const message = createWheelSpinHoldStarted(current.identity.playerId, wheelState);
+      if (!send(message)) return;
+      wheelSpinHoldRef.current = { key, holdId: message.holdId };
+    },
+    cancelWheelSpinHold: () => {
+      wheelSpinHoldRef.current = null;
+    },
+    startWheelSpin: (holdDurationMs) => {
+      const current = stateRef.current;
+      const wheelState = current.snapshot?.wheelState;
+      if (current.connectionStatus !== 'connected'
+        || !wheelState
+        || wheelState.phase !== 'waiting'
+        || wheelState.selectedPlayerId !== current.identity.playerId) return;
+      const key = wheelSpinRequestKey(wheelState);
+      const activeHold = wheelSpinHoldRef.current?.key === key ? wheelSpinHoldRef.current : null;
+      if (Date.now() >= wheelState.waitingDeadlineAt && activeHold === null) return;
       if (current.pendingWheelSpinRequestKey === key) return;
+      wheelSpinHoldRef.current = null;
       stateRef.current = { ...current, pendingWheelSpinRequestKey: key };
       dispatch({ type: 'wheel-spin-requested', key });
-      send(createStartWheelSpin(current.identity.playerId, wheelState, holdDurationMs));
+      send(createStartWheelSpin(current.identity.playerId, wheelState, holdDurationMs, activeHold?.holdId));
     },
     setAnswer: (categoryId, value) => dispatch({ type: 'answer', categoryId, value }),
     submitAnswers: () => {

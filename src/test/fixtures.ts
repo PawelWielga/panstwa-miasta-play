@@ -28,7 +28,7 @@ export function appState(overrides: Partial<AppState> = {}): AppState {
 }
 export function appActions(): AppActions {
   return {
-    updateIdentity: vi.fn((values: Pick<PlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>) => ({ ...identity, ...values })), connect: vi.fn(() => Promise.resolve()), cancel: vi.fn(), retry: vi.fn(), toggleReady: vi.fn(), startWheelSpin: vi.fn(),
+    updateIdentity: vi.fn((values: Pick<PlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>) => ({ ...identity, ...values })), connect: vi.fn(() => Promise.resolve()), cancel: vi.fn(), retry: vi.fn(), toggleReady: vi.fn(), startWheelSpinHold: vi.fn(), cancelWheelSpinHold: vi.fn(), startWheelSpin: vi.fn(),
     setAnswer: vi.fn(), submitAnswers: vi.fn(), editAnswers: vi.fn(), clearNotice: vi.fn(),
   };
 }

@@ -1,5 +1,5 @@
 import { SUPPORTED_GAME_PROTOCOL_VERSION } from './constants';
-import type { ClientMessage, CountriesCitiesWheelState, PlayerProfile } from './messages';
+import type { ClientMessage, CountriesCitiesWheelSpinHoldStartedMessage, CountriesCitiesWheelState, PlayerProfile } from './messages';
 import { generateRequestId } from '../utils/ids';
 
 export interface IdentityCredentials { profile: PlayerProfile; reconnectToken: string }
@@ -23,10 +23,24 @@ export function createSubmit(profile: PlayerProfile, answers: Record<string, str
 export function createEditAnswers(playerId: string): ClientMessage {
   return { type: 'countries-cities:edit-answers', playerId, ...meta(playerId) };
 }
+export function createWheelSpinHoldStarted(
+  playerId: string,
+  wheelState: CountriesCitiesWheelState,
+): CountriesCitiesWheelSpinHoldStartedMessage {
+  return {
+    type: 'player:wheelSpinHoldStarted',
+    hostSessionId: wheelState.hostSessionId,
+    roundNumber: wheelState.roundNumber,
+    spinId: wheelState.spinId,
+    holdId: generateRequestId(),
+    ...meta(playerId),
+  };
+}
 export function createStartWheelSpin(
   playerId: string,
   wheelState: CountriesCitiesWheelState,
   holdDurationMs?: number,
+  holdId?: string,
 ): ClientMessage {
   return {
     type: 'player:startWheelSpin',
@@ -34,6 +48,7 @@ export function createStartWheelSpin(
     roundNumber: wheelState.roundNumber,
     spinId: wheelState.spinId,
     ...(holdDurationMs === undefined ? {} : { holdDurationMs }),
+    ...(holdId === undefined ? {} : { holdId }),
     ...meta(playerId),
   };
 }

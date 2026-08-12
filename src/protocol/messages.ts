@@ -182,11 +182,19 @@ export interface CountriesCitiesSubmitMessage extends MessageMetadata {
 export interface CountriesCitiesEditAnswersMessage extends MessageMetadata {
   type: 'countries-cities:edit-answers'; playerId: string;
 }
+export interface CountriesCitiesWheelSpinHoldStartedMessage extends MessageMetadata {
+  type: 'player:wheelSpinHoldStarted';
+  hostSessionId: string;
+  roundNumber: number;
+  spinId: string;
+  holdId: string;
+}
 export interface CountriesCitiesStartWheelSpinMessage extends MessageMetadata {
   type: 'player:startWheelSpin';
   hostSessionId: string;
   roundNumber: number;
   spinId: string;
   holdDurationMs?: number;
+  holdId?: string;
 }
-export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage | CountriesCitiesStartWheelSpinMessage;
+export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage | CountriesCitiesWheelSpinHoldStartedMessage | CountriesCitiesStartWheelSpinMessage;
