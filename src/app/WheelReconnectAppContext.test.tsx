@@ -138,7 +138,7 @@ describe('AppProvider wheel reconnect continuity', () => {
     const holdMessage = firstTransport.send.mock.calls
       .map(([message]) => message)
       .find((message) => message.type === 'player:wheelSpinHoldStarted');
-    if (!holdMessage || holdMessage.type !== 'player:wheelSpinHoldStarted') {
+    if (!holdMessage) {
       throw new Error('Expected wheel hold message.');
     }
 
