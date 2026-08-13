@@ -21,14 +21,14 @@ export function wheelSpinProgress(state: CountriesCitiesWheelState, nowMilliseco
 }
 
 export function wheelSpinProfileIndex(spinSeed: number | undefined): number {
-  if (spinSeed === undefined || COUNTRIES_CITIES_LETTERS.length === 0) return 0;
+  if (spinSeed === undefined) return 0;
   const profileEntropy = Math.floor(Math.abs(spinSeed) / COUNTRIES_CITIES_LETTERS.length);
   return profileEntropy % WHEEL_SPIN_CURVES.length;
 }
 
 export function easedWheelSpinProgress(progress: number, spinSeed?: number): number {
-  const [x1, y1, x2, y2] = WHEEL_SPIN_CURVES[wheelSpinProfileIndex(spinSeed)];
-  return cubicBezierTransform(clamp(progress, 0, 1), x1, y1, x2, y2);
+  const curve = WHEEL_SPIN_CURVES[wheelSpinProfileIndex(spinSeed)] ?? WHEEL_SPIN_CURVES[0];
+  return cubicBezierTransform(clamp(progress, 0, 1), curve[0], curve[1], curve[2], curve[3]);
 }
 
 export function initialWheelRotation(state: CountriesCitiesWheelState, segments: readonly string[] = COUNTRIES_CITIES_LETTERS): number {
