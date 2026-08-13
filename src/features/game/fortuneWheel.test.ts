@@ -6,6 +6,7 @@ import {
   hiddenTargetLetter,
   initialWheelRotation,
   rotationForIndex,
+  wheelLandingOffset,
   wheelRotation,
   wheelSpinProgress,
 } from './fortuneWheel';
@@ -48,7 +49,9 @@ describe('fortune wheel math', () => {
   it('ends on the host-revealed letter', () => {
     const finished: CountriesCitiesWheelState = { ...spinningState, phase: 'finished', letter: 'R' };
     const index = COUNTRIES_CITIES_LETTERS.indexOf('R');
-    expect(wheelRotation(finished, 50_000)).toBeCloseTo(rotationForIndex(COUNTRIES_CITIES_LETTERS, index));
+    const expected = rotationForIndex(COUNTRIES_CITIES_LETTERS, index)
+      + wheelLandingOffset(finished.spinSeed);
+    expect(wheelRotation(finished, 50_000)).toBeCloseTo(expected);
   });
 
   it('includes the configured full turns before the target offset', () => {
