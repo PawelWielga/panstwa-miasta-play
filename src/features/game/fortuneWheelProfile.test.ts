@@ -60,6 +60,34 @@ describe('fortune wheel spin profiles', () => {
     );
   });
 
+  it('keeps shared Android and web motion vectors stable', () => {
+    const segmentCount = COUNTRIES_CITIES_LETTERS.length;
+    const sweep = FULL_TURN / segmentCount;
+    const seeds = [4, 27, 50, 73, 96, 119, 142, 165, 188];
+    const expectedTargets = [4, 5, 6, 7, 8, 9, 10, 11, 12];
+    const expectedProfiles = [0, 1, 2, 0, 1, 2, 0, 1, 2];
+    const expectedOffsetRatios = [
+      -2 / 9,
+      -1 / 6,
+      -1 / 9,
+      -1 / 18,
+      0,
+      1 / 18,
+      1 / 9,
+      1 / 6,
+      2 / 9,
+    ];
+
+    for (const [index, seed] of seeds.entries()) {
+      expect(seed % segmentCount).toBe(expectedTargets[index]);
+      expect(wheelSpinProfileIndex(seed)).toBe(expectedProfiles[index]);
+      expect(wheelLandingOffset(seed) / sweep).toBeCloseTo(
+        expectedOffsetRatios[index],
+        12,
+      );
+    }
+  });
+
   it('preserves the spinning landing angle when the host reveals the result', () => {
     const segmentCount = COUNTRIES_CITIES_LETTERS.length;
     const targetIndex = 4;
@@ -88,10 +116,15 @@ describe('fortune wheel spin profiles', () => {
     const atFinish = spinStartedAt + spinDurationMs;
     const spinningRotation = wheelRotation(spinning, atFinish);
     const finishedRotation = wheelRotation(finished, atFinish);
+    const segmentAtPointer = (
+      Math.round(-finishedRotation / (FULL_TURN / segmentCount)) % segmentCount
+      + segmentCount
+    ) % segmentCount;
 
     expect(positiveModulo(spinningRotation, FULL_TURN)).toBeCloseTo(
       positiveModulo(finishedRotation, FULL_TURN),
       9,
     );
+    expect(segmentAtPointer).toBe(targetIndex);
   });
 });
