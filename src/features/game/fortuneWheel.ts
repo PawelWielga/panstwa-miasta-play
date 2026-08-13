@@ -13,6 +13,9 @@ const WHEEL_SPIN_CURVES = [
   [0.14, 0, 0.36, 1],
 ] as const;
 
+const LANDING_OFFSET_POSITIONS = 9;
+const LANDING_OFFSET_DIVISOR = 18;
+
 export function wheelSpinProgress(state: CountriesCitiesWheelState, nowMilliseconds: number): number {
   if (state.phase === 'waiting') return 0;
   if (state.phase === 'finished') return 1;
@@ -31,6 +34,16 @@ export function easedWheelSpinProgress(progress: number, spinSeed?: number): num
   return cubicBezierTransform(clamp(progress, 0, 1), curve[0], curve[1], curve[2], curve[3]);
 }
 
+export function wheelLandingOffset(
+  spinSeed: number | undefined,
+  segments: readonly string[] = COUNTRIES_CITIES_LETTERS,
+): number {
+  if (spinSeed === undefined || segments.length === 0) return 0;
+  const profileEntropy = Math.floor(Math.abs(spinSeed) / COUNTRIES_CITIES_LETTERS.length);
+  const centeredStep = profileEntropy % LANDING_OFFSET_POSITIONS - Math.floor(LANDING_OFFSET_POSITIONS / 2);
+  return centeredStep * (FULL_TURN / segments.length) / LANDING_OFFSET_DIVISOR;
+}
+
 export function initialWheelRotation(state: CountriesCitiesWheelState, segments: readonly string[] = COUNTRIES_CITIES_LETTERS): number {
   if (segments.length === 0) return 0;
   const hash = stableHash(state.spinId);
@@ -46,9 +59,11 @@ export function wheelRotation(
   if (segments.length === 0) return 0;
   const initial = initialWheelRotation(state, segments);
   if (state.phase === 'waiting') return initial;
-  if (state.phase === 'finished') return rotationForLetter(segments, state.letter);
+  if (state.phase === 'finished') {
+    return rotationForLetter(segments, state.letter) + wheelLandingOffset(state.spinSeed, segments);
+  }
 
-  const target = rotationForSeed(segments, state.spinSeed);
+  const target = rotationForSeed(segments, state.spinSeed) + wheelLandingOffset(state.spinSeed, segments);
   const turns = clamp(Math.trunc(state.finalTurns ?? 6), 1, 20);
   const distance = turns * FULL_TURN + positiveModulo(target - initial, FULL_TURN);
   return initial + easedWheelSpinProgress(wheelSpinProgress(state, nowMilliseconds), state.spinSeed) * distance;
