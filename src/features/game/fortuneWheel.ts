@@ -7,6 +7,12 @@ export const COUNTRIES_CITIES_LETTERS = [
 
 export const FULL_TURN = Math.PI * 2;
 
+const WHEEL_SPIN_CURVES = [
+  [0.1, 0, 0.3, 1],
+  [0.08, 0, 0.24, 1],
+  [0.14, 0, 0.36, 1],
+] as const;
+
 export function wheelSpinProgress(state: CountriesCitiesWheelState, nowMilliseconds: number): number {
   if (state.phase === 'waiting') return 0;
   if (state.phase === 'finished') return 1;
@@ -14,8 +20,15 @@ export function wheelSpinProgress(state: CountriesCitiesWheelState, nowMilliseco
   return clamp((nowMilliseconds - state.spinStartedAt) / state.spinDurationMs, 0, 1);
 }
 
-export function easedWheelSpinProgress(progress: number): number {
-  return cubicBezierTransform(clamp(progress, 0, 1), 0.1, 0, 0.3, 1);
+export function wheelSpinProfileIndex(spinSeed: number | undefined): number {
+  if (spinSeed === undefined || COUNTRIES_CITIES_LETTERS.length === 0) return 0;
+  const profileEntropy = Math.floor(Math.abs(spinSeed) / COUNTRIES_CITIES_LETTERS.length);
+  return profileEntropy % WHEEL_SPIN_CURVES.length;
+}
+
+export function easedWheelSpinProgress(progress: number, spinSeed?: number): number {
+  const [x1, y1, x2, y2] = WHEEL_SPIN_CURVES[wheelSpinProfileIndex(spinSeed)];
+  return cubicBezierTransform(clamp(progress, 0, 1), x1, y1, x2, y2);
 }
 
 export function initialWheelRotation(state: CountriesCitiesWheelState, segments: readonly string[] = COUNTRIES_CITIES_LETTERS): number {
@@ -38,7 +51,7 @@ export function wheelRotation(
   const target = rotationForSeed(segments, state.spinSeed);
   const turns = clamp(Math.trunc(state.finalTurns ?? 6), 1, 20);
   const distance = turns * FULL_TURN + positiveModulo(target - initial, FULL_TURN);
-  return initial + easedWheelSpinProgress(wheelSpinProgress(state, nowMilliseconds)) * distance;
+  return initial + easedWheelSpinProgress(wheelSpinProgress(state, nowMilliseconds), state.spinSeed) * distance;
 }
 
 export function hiddenTargetLetter(
