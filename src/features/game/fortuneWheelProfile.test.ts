@@ -63,6 +63,11 @@ describe('fortune wheel spin profiles', () => {
   it('keeps shared Android and web motion vectors stable', () => {
     const segmentCount = COUNTRIES_CITIES_LETTERS.length;
     const sweep = FULL_TURN / segmentCount;
+    const expectedHalfwayProgressByProfile = [
+      0.7895421089977663,
+      0.816150468319643,
+      0.7545857428755725,
+    ] as const;
     const vectors = [
       { seed: 4, target: 4, profile: 0, offsetRatio: -2 / 9 },
       { seed: 27, target: 5, profile: 1, offsetRatio: -1 / 6 },
@@ -80,6 +85,10 @@ describe('fortune wheel spin profiles', () => {
       expect(wheelSpinProfileIndex(vector.seed)).toBe(vector.profile);
       expect(wheelLandingOffset(vector.seed) / sweep).toBeCloseTo(
         vector.offsetRatio,
+        12,
+      );
+      expect(easedWheelSpinProgress(0.5, vector.seed)).toBeCloseTo(
+        expectedHalfwayProgressByProfile[vector.profile],
         12,
       );
     }
