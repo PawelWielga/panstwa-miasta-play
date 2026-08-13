@@ -63,26 +63,23 @@ describe('fortune wheel spin profiles', () => {
   it('keeps shared Android and web motion vectors stable', () => {
     const segmentCount = COUNTRIES_CITIES_LETTERS.length;
     const sweep = FULL_TURN / segmentCount;
-    const seeds = [4, 27, 50, 73, 96, 119, 142, 165, 188];
-    const expectedTargets = [4, 5, 6, 7, 8, 9, 10, 11, 12];
-    const expectedProfiles = [0, 1, 2, 0, 1, 2, 0, 1, 2];
-    const expectedOffsetRatios = [
-      -2 / 9,
-      -1 / 6,
-      -1 / 9,
-      -1 / 18,
-      0,
-      1 / 18,
-      1 / 9,
-      1 / 6,
-      2 / 9,
-    ];
+    const vectors = [
+      { seed: 4, target: 4, profile: 0, offsetRatio: -2 / 9 },
+      { seed: 27, target: 5, profile: 1, offsetRatio: -1 / 6 },
+      { seed: 50, target: 6, profile: 2, offsetRatio: -1 / 9 },
+      { seed: 73, target: 7, profile: 0, offsetRatio: -1 / 18 },
+      { seed: 96, target: 8, profile: 1, offsetRatio: 0 },
+      { seed: 119, target: 9, profile: 2, offsetRatio: 1 / 18 },
+      { seed: 142, target: 10, profile: 0, offsetRatio: 1 / 9 },
+      { seed: 165, target: 11, profile: 1, offsetRatio: 1 / 6 },
+      { seed: 188, target: 12, profile: 2, offsetRatio: 2 / 9 },
+    ] as const;
 
-    for (const [index, seed] of seeds.entries()) {
-      expect(seed % segmentCount).toBe(expectedTargets[index]);
-      expect(wheelSpinProfileIndex(seed)).toBe(expectedProfiles[index]);
-      expect(wheelLandingOffset(seed) / sweep).toBeCloseTo(
-        expectedOffsetRatios[index],
+    for (const vector of vectors) {
+      expect(vector.seed % segmentCount).toBe(vector.target);
+      expect(wheelSpinProfileIndex(vector.seed)).toBe(vector.profile);
+      expect(wheelLandingOffset(vector.seed) / sweep).toBeCloseTo(
+        vector.offsetRatio,
         12,
       );
     }
