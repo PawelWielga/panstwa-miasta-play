@@ -23,6 +23,22 @@ describe('fortune wheel spin profiles', () => {
     );
   });
 
+  it('uses the active letter pool for animation entropy', () => {
+    const segments = ['A', 'B', 'Ł'] as const;
+    const targetIndex = 2;
+    const seed = 2 * segments.length + targetIndex;
+    const sweep = FULL_TURN / segments.length;
+
+    expect(seed % segments.length).toBe(targetIndex);
+    expect(wheelSpinProfileIndex(seed, segments)).toBe(2);
+    expect(wheelSpinProfileIndex(seed)).toBe(0);
+    expect(wheelLandingOffset(seed, segments) / sweep).toBeCloseTo(-1 / 9, 12);
+    expect(easedWheelSpinProgress(0.5, seed, segments)).toBeCloseTo(
+      0.7545857428755725,
+      12,
+    );
+  });
+
   it('provides distinct deterministic deceleration while ending together', () => {
     const segmentCount = COUNTRIES_CITIES_LETTERS.length;
     const targetIndex = 4;

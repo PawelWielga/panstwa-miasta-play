@@ -23,14 +23,21 @@ export function wheelSpinProgress(state: CountriesCitiesWheelState, nowMilliseco
   return clamp((nowMilliseconds - state.spinStartedAt) / state.spinDurationMs, 0, 1);
 }
 
-export function wheelSpinProfileIndex(spinSeed: number | undefined): number {
-  if (spinSeed === undefined) return 0;
-  const profileEntropy = Math.floor(Math.abs(spinSeed) / COUNTRIES_CITIES_LETTERS.length);
+export function wheelSpinProfileIndex(
+  spinSeed: number | undefined,
+  segments: readonly string[] = COUNTRIES_CITIES_LETTERS,
+): number {
+  if (spinSeed === undefined || segments.length === 0) return 0;
+  const profileEntropy = Math.floor(Math.abs(spinSeed) / segments.length);
   return profileEntropy % WHEEL_SPIN_CURVES.length;
 }
 
-export function easedWheelSpinProgress(progress: number, spinSeed?: number): number {
-  const curve = WHEEL_SPIN_CURVES[wheelSpinProfileIndex(spinSeed)] ?? WHEEL_SPIN_CURVES[0];
+export function easedWheelSpinProgress(
+  progress: number,
+  spinSeed?: number,
+  segments: readonly string[] = COUNTRIES_CITIES_LETTERS,
+): number {
+  const curve = WHEEL_SPIN_CURVES[wheelSpinProfileIndex(spinSeed, segments)] ?? WHEEL_SPIN_CURVES[0];
   return cubicBezierTransform(clamp(progress, 0, 1), curve[0], curve[1], curve[2], curve[3]);
 }
 
@@ -39,7 +46,7 @@ export function wheelLandingOffset(
   segments: readonly string[] = COUNTRIES_CITIES_LETTERS,
 ): number {
   if (spinSeed === undefined || segments.length === 0) return 0;
-  const profileEntropy = Math.floor(Math.abs(spinSeed) / COUNTRIES_CITIES_LETTERS.length);
+  const profileEntropy = Math.floor(Math.abs(spinSeed) / segments.length);
   const centeredStep = profileEntropy % LANDING_OFFSET_POSITIONS - Math.floor(LANDING_OFFSET_POSITIONS / 2);
   return centeredStep * (FULL_TURN / segments.length) / LANDING_OFFSET_DIVISOR;
 }
@@ -66,7 +73,11 @@ export function wheelRotation(
   const target = rotationForSeed(segments, state.spinSeed) + wheelLandingOffset(state.spinSeed, segments);
   const turns = clamp(Math.trunc(state.finalTurns ?? 6), 1, 20);
   const distance = turns * FULL_TURN + positiveModulo(target - initial, FULL_TURN);
-  return initial + easedWheelSpinProgress(wheelSpinProgress(state, nowMilliseconds), state.spinSeed) * distance;
+  return initial + easedWheelSpinProgress(
+    wheelSpinProgress(state, nowMilliseconds),
+    state.spinSeed,
+    segments,
+  ) * distance;
 }
 
 export function hiddenTargetLetter(
