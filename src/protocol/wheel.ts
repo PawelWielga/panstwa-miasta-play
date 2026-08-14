@@ -16,8 +16,8 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
   if (!isFiniteNumber(value.waitingStartedAt) || value.waitingStartedAt < 0) return null;
   if (!isFiniteNumber(value.waitingDeadlineAt) || value.waitingDeadlineAt < value.waitingStartedAt) return null;
 
-  const letterPool = value.letterPool === undefined ? undefined : parseLetterPool(value.letterPool);
-  if (value.letterPool !== undefined && !letterPool) return null;
+  const letterPool = value.letterPool == null ? undefined : parseLetterPool(value.letterPool);
+  if (value.letterPool != null && !letterPool) return null;
 
   const phase = value.phase as CountriesCitiesWheelPhase;
   if (phase === 'waiting') {

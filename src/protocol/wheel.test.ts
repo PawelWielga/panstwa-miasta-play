@@ -2,7 +2,7 @@ import fixtureText from '../test/fixtures/countries_cities_wheel_state_v1.json?r
 import { describe, expect, it } from 'vitest';
 import { parseWheelState } from './wheel';
 
-const EXPECTED_FIXTURE_SHA256 = 'acd182719da31bf1f36300b0749cd08d7829968b9bb712135ae55c99c0dd2031';
+const EXPECTED_FIXTURE_SHA256 = 'aa8c59bb8871768f4739120b6527f928b5ed2cb38f7bfef9ea61887f4e34cf98';
 const fixtureBytes = new TextEncoder().encode(fixtureText);
 const fixture = JSON.parse(fixtureText) as WheelContractFixture;
 
@@ -39,6 +39,7 @@ describe('parseWheelState', () => {
   it('treats null optional waiting fields as absent', () => {
     expect(parseWheelState({
       ...waitingState,
+      letterPool: null,
       spinStartedAt: null,
       spinDurationMs: null,
       spinSeed: null,

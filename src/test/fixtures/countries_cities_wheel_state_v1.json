@@ -12,26 +12,7 @@
       "letterPool": [
         "A",
         "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "G",
-        "H",
-        "I",
-        "J",
-        "K",
-        "L",
-        "M",
-        "N",
-        "O",
-        "P",
-        "R",
-        "S",
-        "T",
-        "U",
-        "W",
-        "Z"
+        "Ł"
       ],
       "waitingStartedAt": 1000,
       "waitingDeadlineAt": 11000,
@@ -196,6 +177,44 @@
       "waitingStartedAt": 1000,
       "waitingDeadlineAt": 11000,
       "finalTurns": 21
+    },
+    "emptyLetterPool": {
+      "schemaVersion": 1,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "letterPool": []
+    },
+    "duplicateLetterPool": {
+      "schemaVersion": 1,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "letterPool": [
+        "A",
+        "A"
+      ]
+    },
+    "multiLetterPoolEntry": {
+      "schemaVersion": 1,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "letterPool": [
+        "AB"
+      ]
     }
   }
 }
