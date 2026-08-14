@@ -36,6 +36,17 @@ describe('parseWheelState', () => {
     });
   });
 
+  it('treats null optional waiting fields as absent', () => {
+    expect(parseWheelState({
+      ...waitingState,
+      spinStartedAt: null,
+      spinDurationMs: null,
+      spinSeed: null,
+      finalTurns: null,
+      letter: null,
+    })).toEqual(waitingState);
+  });
+
   it('accepts a host-selected animation profile while waiting', () => {
     expect(parseWheelState({ ...waitingState, spinSeed: 12345, finalTurns: 7 })).toMatchObject({
       phase: 'waiting',

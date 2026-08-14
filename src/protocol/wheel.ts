@@ -21,13 +21,13 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
 
   const phase = value.phase as CountriesCitiesWheelPhase;
   if (phase === 'waiting') {
-    if (value.spinStartedAt !== undefined || value.spinDurationMs !== undefined || value.letter !== undefined) return null;
-    const spinSeed = value.spinSeed === undefined
+    if (value.spinStartedAt != null || value.spinDurationMs != null || value.letter != null) return null;
+    const spinSeed = value.spinSeed == null
       ? undefined
       : isInteger(value.spinSeed) && value.spinSeed >= 0
         ? value.spinSeed
         : null;
-    const finalTurns = value.finalTurns === undefined
+    const finalTurns = value.finalTurns == null
       ? undefined
       : isInteger(value.finalTurns) && value.finalTurns >= 1 && value.finalTurns <= 20
         ? value.finalTurns
@@ -53,7 +53,7 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
   if (!isInteger(value.spinSeed) || value.spinSeed < 0) return null;
   if (!isInteger(value.finalTurns) || value.finalTurns < 1 || value.finalTurns > 20) return null;
 
-  if (phase === 'spinning' && value.letter !== undefined) return null;
+  if (phase === 'spinning' && value.letter != null) return null;
   const revealedLetter = phase === 'finished' && typeof value.letter === 'string'
     ? value.letter.trim().toUpperCase()
     : undefined;
