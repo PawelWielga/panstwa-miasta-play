@@ -2,7 +2,7 @@ import fixtureText from '../test/fixtures/countries_cities_wheel_state_v1.json?r
 import { describe, expect, it } from 'vitest';
 import { parseWheelState } from './wheel';
 
-const EXPECTED_FIXTURE_SHA256 = '21b6b00316163d32df85ba3b530be1b86f80385e9b3b052a2ec7cb014d26b42c';
+const EXPECTED_FIXTURE_SHA256 = 'acd182719da31bf1f36300b0749cd08d7829968b9bb712135ae55c99c0dd2031';
 const fixtureBytes = new TextEncoder().encode(fixtureText);
 const fixture = JSON.parse(fixtureText) as WheelContractFixture;
 
@@ -64,8 +64,9 @@ describe('parseWheelState', () => {
     expect(parseWheelState(fixture.states.waiting)).toEqual(fixture.states.waiting);
     expect(parseWheelState(fixture.states.spinning)).toEqual(fixture.states.spinning);
     expect(parseWheelState(fixture.states.finished)).toEqual(fixture.states.finished);
-    expect(parseWheelState(fixture.invalidStates.revealedBeforeFinished)).toBeNull();
-    expect(parseWheelState(fixture.invalidStates.unsupportedSchema)).toBeNull();
+    for (const vector of Object.values(fixture.invalidStates)) {
+      expect(parseWheelState(vector)).toBeNull();
+    }
   });
 
   it('does not expose a letter before finished', () => {
@@ -93,10 +94,7 @@ interface WheelContractFixture {
     spinning: Record<string, unknown>;
     finished: Record<string, unknown>;
   };
-  invalidStates: {
-    revealedBeforeFinished: Record<string, unknown>;
-    unsupportedSchema: Record<string, unknown>;
-  };
+  invalidStates: Record<string, Record<string, unknown>>;
 }
 
 function toHex(value: ArrayBuffer): string {
