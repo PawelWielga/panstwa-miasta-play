@@ -2,7 +2,7 @@ import fixtureText from '../test/fixtures/countries_cities_wheel_state_v1.json?r
 import { describe, expect, it } from 'vitest';
 import { parseWheelState } from './wheel';
 
-const EXPECTED_FIXTURE_SHA256 = 'aa8c59bb8871768f4739120b6527f928b5ed2cb38f7bfef9ea61887f4e34cf98';
+const EXPECTED_FIXTURE_SHA256 = 'bdeebac440a416580cbac563d4d1c95bf1292bc504e04887ab806a82b5a7d083';
 const fixtureBytes = new TextEncoder().encode(fixtureText);
 const fixture = JSON.parse(fixtureText) as WheelContractFixture;
 
@@ -30,9 +30,9 @@ describe('parseWheelState', () => {
   it('parses waiting, spinning and finished states', () => {
     expect(parseWheelState(waitingState)).toEqual(waitingState);
     expect(parseWheelState(spinningState)).toEqual(spinningState);
-    expect(parseWheelState({ ...spinningState, phase: 'finished', letter: 'ą' })).toMatchObject({
+    expect(parseWheelState({ ...spinningState, phase: 'finished', letter: 'r' })).toMatchObject({
       phase: 'finished',
-      letter: 'Ą',
+      letter: 'R',
     });
   });
 
@@ -65,6 +65,16 @@ describe('parseWheelState', () => {
     expect(parseWheelState({ ...waitingState, letterPool: [] })).toBeNull();
     expect(parseWheelState({ ...waitingState, letterPool: ['A', 'A'] })).toBeNull();
     expect(parseWheelState({ ...waitingState, letterPool: ['AB'] })).toBeNull();
+  });
+
+  it('rejects a finished letter outside the authoritative pool', () => {
+    expect(parseWheelState({
+      ...spinningState,
+      phase: 'finished',
+      letter: 'Ł',
+      letterPool: ['A', 'B'],
+    })).toBeNull();
+    expect(parseWheelState({ ...spinningState, phase: 'finished', letter: 'Ą' })).toBeNull();
   });
 
   it('matches the shared Flutter and WWW wheel vectors', async () => {

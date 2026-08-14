@@ -3,6 +3,11 @@ import type { CountriesCitiesWheelPhase, CountriesCitiesWheelState } from './mes
 
 export const COUNTRIES_CITIES_WHEEL_SCHEMA_VERSION = 1 as const;
 
+const legacyWheelLetterPool = [
+  'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
+  'L', 'M', 'N', 'O', 'P', 'R', 'S', 'T', 'U', 'W', 'Z',
+] as const;
+
 const wheelPhases = new Set<CountriesCitiesWheelPhase>(['waiting', 'spinning', 'finished']);
 
 export function parseWheelState(value: unknown): CountriesCitiesWheelState | null {
@@ -18,6 +23,7 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
 
   const letterPool = value.letterPool == null ? undefined : parseLetterPool(value.letterPool);
   if (value.letterPool != null && !letterPool) return null;
+  const activeLetterPool = letterPool ?? legacyWheelLetterPool;
 
   const phase = value.phase as CountriesCitiesWheelPhase;
   if (phase === 'waiting') {
@@ -57,7 +63,11 @@ export function parseWheelState(value: unknown): CountriesCitiesWheelState | nul
   const revealedLetter = phase === 'finished' && typeof value.letter === 'string'
     ? value.letter.trim().toUpperCase()
     : undefined;
-  if (phase === 'finished' && (!revealedLetter || revealedLetter.length > 4)) return null;
+  if (phase === 'finished' && (
+    !revealedLetter
+    || revealedLetter.length > 4
+    || !activeLetterPool.some((letter) => letter === revealedLetter)
+  )) return null;
 
   return {
     schemaVersion: COUNTRIES_CITIES_WHEEL_SCHEMA_VERSION,

@@ -94,7 +94,7 @@
       "spinDurationMs": 6000,
       "spinSeed": 12345,
       "finalTurns": 6,
-      "letter": "Ł"
+      "letter": "R"
     }
   },
   "invalidStates": {
@@ -177,6 +177,25 @@
       "waitingStartedAt": 1000,
       "waitingDeadlineAt": 11000,
       "finalTurns": 21
+    },
+    "finishedLetterOutsidePool": {
+      "schemaVersion": 1,
+      "phase": "finished",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "letterPool": [
+        "A",
+        "B"
+      ],
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "spinStartedAt": 2000,
+      "spinDurationMs": 6000,
+      "spinSeed": 12345,
+      "finalTurns": 6,
+      "letter": "Ł"
     },
     "emptyLetterPool": {
       "schemaVersion": 1,
