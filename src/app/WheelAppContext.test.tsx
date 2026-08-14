@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, CountriesCitiesWheelState, GameSnapshot, HostMessage } from '../protocol/messages';
@@ -122,6 +122,63 @@ describe('AppProvider synchronized wheel intent', () => {
       transport.emitMessage({ type: 'game:snapshot', snapshot: snapshot(3, spinning) });
     });
     expect(currentState.pendingWheelSpinRequestKey).toBeNull();
+  });
+
+  it('allows the same spin to be retried after a send failure and reconnect', async () => {
+    const transport = new WheelTransport();
+    render(<AppProvider transportFactory={() => transport}><Harness /></AppProvider>);
+
+    await act(async () => {
+      await actions.connect(joinParameters);
+    });
+
+    const waiting: CountriesCitiesWheelState = {
+      schemaVersion: 1,
+      phase: 'waiting',
+      hostSessionId: 'session-1',
+      roundNumber: 1,
+      spinId: 'spin-retry',
+      selectedPlayerId: currentState.identity.playerId,
+      waitingStartedAt: Date.now() - 1_000,
+      waitingDeadlineAt: Date.now() + 9_000,
+    };
+    act(() => {
+      transport.emitMessage({ type: 'game:snapshot', snapshot: snapshot(1, waiting) });
+    });
+
+    let failedWheelSend = false;
+    transport.send.mockImplementation((message: ClientMessage) => {
+      if (!failedWheelSend && message.type === 'player:startWheelSpin') {
+        failedWheelSend = true;
+        throw new Error('simulated send failure');
+      }
+    });
+
+    act(() => {
+      actions.startWheelSpin();
+    });
+    expect(currentState.pendingWheelSpinRequestKey).toBeNull();
+    expect(currentState.connectionStatus).toBe('error');
+
+    act(() => {
+      actions.retry();
+    });
+    await waitFor(() => {
+      expect(currentState.connectionStatus).toBe('connected');
+    });
+
+    act(() => {
+      transport.emitMessage({ type: 'game:snapshot', snapshot: snapshot(2, waiting) });
+    });
+    act(() => {
+      actions.startWheelSpin();
+    });
+
+    const spinMessages = transport.send.mock.calls
+      .map(([message]) => message)
+      .filter((message) => message.type === 'player:startWheelSpin');
+    expect(spinMessages).toHaveLength(2);
+    expect(currentState.pendingWheelSpinRequestKey).toBe(wheelSpinRequestKey(waiting));
   });
 
   it('links a hold started before the deadline to a release after it', async () => {

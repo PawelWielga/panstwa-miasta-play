@@ -642,9 +642,9 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       if (Date.now() >= wheelState.waitingDeadlineAt && activeHold === null) return;
       if (current.pendingWheelSpinRequestKey === key) return;
       wheelSpinHoldRef.current = null;
+      if (!send(createStartWheelSpin(current.identity.playerId, wheelState, holdDurationMs, activeHold?.holdId))) return;
       stateRef.current = { ...current, pendingWheelSpinRequestKey: key };
       dispatch({ type: 'wheel-spin-requested', key });
-      send(createStartWheelSpin(current.identity.playerId, wheelState, holdDurationMs, activeHold?.holdId));
     },
     setAnswer: (categoryId, value) => dispatch({ type: 'answer', categoryId, value }),
     submitAnswers: () => {
