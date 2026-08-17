@@ -6,8 +6,8 @@ import {
   SUPPORTED_GAME_PROTOCOL_VERSION,
 } from './constants';
 import { encodedMessageSize } from './messageSize';
-import type { HostMessage, JsonValue } from './messages';
-import { GameSnapshotChunkAssembler, type GameSnapshotChunkMessage } from './snapshotChunks';
+import type { GameSnapshotChunkHostMessage, HostMessage, JsonValue } from './messages';
+import { GameSnapshotChunkAssembler } from './snapshotChunks';
 import {
   hasValidMetadata, isBoundedString, isFiniteNumber, isInteger, isJsonValue, isRecord,
   parseAnswerResults, parseCategories, parseNumberMap, parsePlayerProfile, parseSettings,
@@ -17,8 +17,7 @@ import {
 const knownTypes = new Set<string>(hostMessageTypes);
 const snapshotChunkAssembler = new GameSnapshotChunkAssembler();
 
-export type ParsedHostMessage = HostMessage | GameSnapshotChunkMessage;
-export type HostMessageParseResult = { ok: true; message: ParsedHostMessage } | { ok: false; reason: string };
+export type HostMessageParseResult = { ok: true; message: HostMessage } | { ok: false; reason: string };
 
 export function parseHostMessage(data: unknown): HostMessageParseResult {
   if (!isJsonValue(data)) return { ok: false, reason: 'Wiadomość nie jest poprawnym JSON-em.' };
@@ -56,7 +55,7 @@ export function parseHostMessage(data: unknown): HostMessageParseResult {
         && data.chunkIndex < data.chunkCount
         && isBoundedString(data.payload, SNAPSHOT_CHUNK_PAYLOAD_MAX_LENGTH);
       if (!valid) return invalid();
-      const chunk: GameSnapshotChunkMessage = {
+      const chunk: GameSnapshotChunkHostMessage = {
         type: data.type,
         gameId: data.gameId,
         sequenceNumber: data.sequenceNumber,
@@ -103,5 +102,5 @@ function pickMetadata(value: Record<string, unknown>): { requestId?: string; sen
     ...(typeof value.sentAt === 'number' ? { sentAt: value.sentAt } : {}),
   };
 }
-function ok(message: ParsedHostMessage): HostMessageParseResult { return { ok: true, message }; }
+function ok(message: HostMessage): HostMessageParseResult { return { ok: true, message }; }
 function invalid(): HostMessageParseResult { return { ok: false, reason: 'Wiadomość hosta ma niepoprawną strukturę.' }; }
