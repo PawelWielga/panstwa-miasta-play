@@ -48,20 +48,22 @@ export function parseHostMessage(data: unknown): HostMessageParseResult {
       const snapshot = parseSnapshot(data.snapshot); return snapshot ? ok({ type: data.type, snapshot, ...metadata }) : invalid();
     }
     case 'game:snapshot-chunk': {
-      const valid = isBoundedString(data.gameId, 128)
-        && isInteger(data.sequenceNumber) && data.sequenceNumber >= 0
-        && isInteger(data.chunkIndex) && data.chunkIndex >= 0
-        && isInteger(data.chunkCount) && data.chunkCount > 0 && data.chunkCount <= MAX_SNAPSHOT_CHUNK_COUNT
-        && data.chunkIndex < data.chunkCount
-        && isBoundedString(data.payload, SNAPSHOT_CHUNK_PAYLOAD_MAX_LENGTH);
-      if (!valid) return invalid();
+      const { gameId, sequenceNumber, chunkIndex, chunkCount, payload } = data;
+      if (
+        typeof gameId !== 'string' || !isBoundedString(gameId, 128)
+        || typeof sequenceNumber !== 'number' || !Number.isInteger(sequenceNumber) || sequenceNumber < 0
+        || typeof chunkIndex !== 'number' || !Number.isInteger(chunkIndex) || chunkIndex < 0
+        || typeof chunkCount !== 'number' || !Number.isInteger(chunkCount) || chunkCount <= 0 || chunkCount > MAX_SNAPSHOT_CHUNK_COUNT
+        || chunkIndex >= chunkCount
+        || typeof payload !== 'string' || !isBoundedString(payload, SNAPSHOT_CHUNK_PAYLOAD_MAX_LENGTH)
+      ) return invalid();
       const chunk: GameSnapshotChunkHostMessage = {
         type: data.type,
-        gameId: data.gameId,
-        sequenceNumber: data.sequenceNumber,
-        chunkIndex: data.chunkIndex,
-        chunkCount: data.chunkCount,
-        payload: data.payload,
+        gameId,
+        sequenceNumber,
+        chunkIndex,
+        chunkCount,
+        payload,
         ...metadata,
       };
       const snapshot = snapshotChunkAssembler.add(chunk);
@@ -89,7 +91,7 @@ export function parseHostMessage(data: unknown): HostMessageParseResult {
     }
     case 'countries-cities:results': {
       const finalResults = parseAnswerResults(data.finalResults); const roundScores = parseNumberMap(data.roundScores); const finalScores = parseNumberMap(data.finalScores);
-      return finalResults && roundScores && finalScores ? ok({ type: data.type, finalResults, roundScores, finalScores, ...metadata }) : invalid();
+      return finalResults && roundScores && finalScores ? ok({ type: data.type, finalResults, roundScores, finalScores, finalScores, ...metadata }) : invalid();
     }
   }
   return invalid();
