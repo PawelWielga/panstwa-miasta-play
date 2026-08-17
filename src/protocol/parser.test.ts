@@ -59,8 +59,13 @@ function maxSupportedSnapshot() {
       connected: true,
     };
   });
-  const hostId = players[0]!.profile.id;
-  const currentCategory = categories[0]!;
+  const host = players.at(0);
+  const lastPlayer = players.at(-1);
+  const currentCategory = categories.at(0);
+  if (!host || !lastPlayer || !currentCategory) {
+    throw new Error('Invalid maximum snapshot fixture.');
+  }
+  const hostId = host.profile.id;
   const submissions = Object.fromEntries(players.map(({ profile }) => [
     profile.id,
     {
@@ -82,7 +87,7 @@ function maxSupportedSnapshot() {
       categories,
       deadlineAt: 123_456_789,
       answeringStartedAt: 123_450_000,
-      lastCallPlayerId: players.at(-1)!.profile.id,
+      lastCallPlayerId: lastPlayer.profile.id,
     },
     settings: { answerDurationSeconds: 180, roundCount: 22, maxPlayers: 12, speedBonusEnabled: true },
     submissions,
