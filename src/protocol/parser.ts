@@ -1,6 +1,13 @@
-import { hostMessageTypes, MAX_MESSAGE_BYTES, SUPPORTED_GAME_PROTOCOL_VERSION } from './constants';
+import {
+  hostMessageTypes,
+  MAX_MESSAGE_BYTES,
+  MAX_SNAPSHOT_CHUNK_COUNT,
+  SNAPSHOT_CHUNK_PAYLOAD_MAX_LENGTH,
+  SUPPORTED_GAME_PROTOCOL_VERSION,
+} from './constants';
 import { encodedMessageSize } from './messageSize';
 import type { HostMessage, JsonValue } from './messages';
+import type { GameSnapshotChunkMessage } from './snapshotChunks';
 import {
   hasValidMetadata, isBoundedString, isFiniteNumber, isInteger, isJsonValue, isRecord,
   parseAnswerResults, parseCategories, parseNumberMap, parsePlayerProfile, parseSettings,
@@ -9,7 +16,8 @@ import {
 
 const knownTypes = new Set<string>(hostMessageTypes);
 
-export type HostMessageParseResult = { ok: true; message: HostMessage } | { ok: false; reason: string };
+export type ParsedHostMessage = HostMessage | GameSnapshotChunkMessage;
+export type HostMessageParseResult = { ok: true; message: ParsedHostMessage } | { ok: false; reason: string };
 
 export function parseHostMessage(data: unknown): HostMessageParseResult {
   if (!isJsonValue(data)) return { ok: false, reason: 'Wiadomość nie jest poprawnym JSON-em.' };
@@ -38,6 +46,23 @@ export function parseHostMessage(data: unknown): HostMessageParseResult {
     }
     case 'game:snapshot': {
       const snapshot = parseSnapshot(data.snapshot); return snapshot ? ok({ type: data.type, snapshot, ...metadata }) : invalid();
+    }
+    case 'game:snapshot-chunk': {
+      const valid = isBoundedString(data.gameId, 128)
+        && isInteger(data.sequenceNumber) && data.sequenceNumber >= 0
+        && isInteger(data.chunkIndex) && data.chunkIndex >= 0
+        && isInteger(data.chunkCount) && data.chunkCount > 0 && data.chunkCount <= MAX_SNAPSHOT_CHUNK_COUNT
+        && data.chunkIndex < data.chunkCount
+        && isBoundedString(data.payload, SNAPSHOT_CHUNK_PAYLOAD_MAX_LENGTH);
+      return valid ? ok({
+        type: data.type,
+        gameId: data.gameId,
+        sequenceNumber: data.sequenceNumber,
+        chunkIndex: data.chunkIndex,
+        chunkCount: data.chunkCount,
+        payload: data.payload,
+        ...metadata,
+      }) : invalid();
     }
     case 'countries-cities:settings': {
       const categories = parseCategories(data.categories); const settings = parseSettings(data.settings);
@@ -74,5 +99,5 @@ function pickMetadata(value: Record<string, unknown>): { requestId?: string; sen
     ...(typeof value.sentAt === 'number' ? { sentAt: value.sentAt } : {}),
   };
 }
-function ok(message: HostMessage): HostMessageParseResult { return { ok: true, message }; }
+function ok(message: ParsedHostMessage): HostMessageParseResult { return { ok: true, message }; }
 function invalid(): HostMessageParseResult { return { ok: false, reason: 'Wiadomość hosta ma niepoprawną strukturę.' }; }
