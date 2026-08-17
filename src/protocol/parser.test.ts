@@ -68,12 +68,12 @@ describe('parseHostMessage', () => {
     expect(parseHostMessage({ type: 'game:snapshot', snapshot }).ok).toBe(true);
   });
 
-  it.each([13, 100])('accepts a snapshot with %i categories', (count) => {
+  it.each([13, 30])('accepts a snapshot with %i categories', (count) => {
     expect(parseHostMessage({ type: 'game:snapshot', snapshot: snapshotWithCategories(count) }).ok).toBe(true);
   });
 
-  it('rejects a snapshot with 101 categories', () => {
-    expect(parseHostMessage({ type: 'game:snapshot', snapshot: snapshotWithCategories(101) }).ok).toBe(false);
+  it('rejects a snapshot with 31 categories', () => {
+    expect(parseHostMessage({ type: 'game:snapshot', snapshot: snapshotWithCategories(31) }).ok).toBe(false);
   });
 
   it('rejects malformed reserved messages', () => expect(parseHostMessage({ type: 'game:snapshot', snapshot: { phase: 'hacked' } }).ok).toBe(false));
@@ -81,7 +81,7 @@ describe('parseHostMessage', () => {
 });
 
 describe('parseCategories', () => {
-  it.each([12, 13, 100])('accepts %i categories', (count) => {
+  it.each([12, 13, 30])('accepts %i categories', (count) => {
     expect(parseCategories(createCategories(count))).toHaveLength(count);
   });
 
@@ -89,7 +89,7 @@ describe('parseCategories', () => {
     expect(parseCategories([])).toBeNull();
   });
 
-  it('rejects 101 categories', () => {
-    expect(parseCategories(createCategories(101))).toBeNull();
+  it('rejects 31 categories', () => {
+    expect(parseCategories(createCategories(31))).toBeNull();
   });
 });

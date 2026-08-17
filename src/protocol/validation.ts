@@ -20,7 +20,7 @@ import { parseWheelState } from './wheel';
 
 export type UnknownRecord = Record<string, unknown>;
 
-const maxCountriesCitiesCategories = 100;
+const maxCountriesCitiesCategories = 30;
 
 export function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

@@ -14,8 +14,8 @@ it('collects category answers and submits them', async () => {
   expect(mocked.value.actions.submitAnswers).toHaveBeenCalled();
 });
 
-it('renders 100 categories and keeps Enter navigation available', async () => {
-  const categories = Array.from({ length: 100 }, (_, index) => ({
+it('renders 30 categories and keeps Enter navigation available', async () => {
+  const categories = Array.from({ length: 30 }, (_, index) => ({
     id: `category-${String(index + 1)}`,
     name: `Kategoria ${String(index + 1)}`,
     order: index,
@@ -26,10 +26,10 @@ it('renders 100 categories and keeps Enter navigation available', async () => {
   };
   render(<AnsweringScreen />);
 
-  expect(screen.getAllByRole('textbox')).toHaveLength(100);
+  expect(screen.getAllByRole('textbox')).toHaveLength(30);
   const firstInput = screen.getByLabelText('Kategoria 1');
   const secondInput = screen.getByLabelText('Kategoria 2');
-  expect(screen.getByLabelText('Kategoria 100')).toBeInTheDocument();
+  expect(screen.getByLabelText('Kategoria 30')).toBeInTheDocument();
 
   firstInput.focus();
   await userEvent.keyboard('{Enter}');
