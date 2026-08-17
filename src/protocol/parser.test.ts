@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MAX_MESSAGE_BYTES } from './constants';
 import { parseHostMessage } from './parser';
 import { parseCategories } from './validation';
 
@@ -43,6 +44,63 @@ function snapshotWithCategories(count: number) {
   };
 }
 
+function maxSupportedSnapshot() {
+  const categories = createCategories(30);
+  const players = Array.from({ length: 12 }, (_, index) => {
+    const id = `p${index.toString(16).padStart(32, '0')}`;
+    return {
+      profile: {
+        id,
+        name: `Gracz ${String(index + 1)}`.padEnd(24, 'x'),
+        color: '#2563eb',
+        emoji: '🦊',
+      },
+      joinedAt: index + 1,
+      connected: true,
+    };
+  });
+  const hostId = players[0]!.profile.id;
+  const currentCategory = categories[0]!;
+  const submissions = Object.fromEntries(players.map(({ profile }) => [
+    profile.id,
+    {
+      playerId: profile.id,
+      playerName: profile.name,
+      answers: Object.fromEntries(categories.map((category) => [category.id, 'A'.repeat(60)])),
+    },
+  ]));
+  const answerIds = players.map(({ profile }) => `${profile.id}::${currentCategory.id}`);
+
+  return {
+    ...snapshot,
+    hostPlayerId: hostId,
+    phase: 'categoryResults',
+    players,
+    categories,
+    round: {
+      ...snapshot.round,
+      categories,
+      deadlineAt: 123_456_789,
+      answeringStartedAt: 123_450_000,
+      lastCallPlayerId: players.at(-1)!.profile.id,
+    },
+    settings: { answerDurationSeconds: 180, roundCount: 22, maxPlayers: 12, speedBonusEnabled: true },
+    submissions,
+    submittedAtByPlayerId: Object.fromEntries(players.map(({ profile }) => [profile.id, 123_456_000])),
+    donePlayerIds: players.map(({ profile }) => profile.id),
+    votes: Object.fromEntries(answerIds.map((answerId) => [answerId, { [hostId]: 'ok' }])),
+    hostVoteSuggestions: Object.fromEntries(answerIds.map((answerId) => [answerId, 'ok'])),
+    reviewReady: { 0: players.map(({ profile }) => profile.id) },
+    finalResults: Object.fromEntries(answerIds.map((answerId) => [answerId, { winner: 'ok', points: 10 }])),
+    roundScores: Object.fromEntries(players.map(({ profile }) => [profile.id, 10])),
+    finalScores: Object.fromEntries(players.map(({ profile }) => [profile.id, 100])),
+    speedBonusPlayerIds: players.slice(0, 3).map(({ profile }) => profile.id),
+    reconnectCredentialFingerprintsByPlayerId: Object.fromEntries(
+      players.map(({ profile }) => [profile.id, 'a'.repeat(64)]),
+    ),
+  };
+}
+
 describe('parseHostMessage', () => {
   it('parses a valid snapshot', () => {
     const result = parseHostMessage({ type: 'game:snapshot', snapshot });
@@ -70,6 +128,14 @@ describe('parseHostMessage', () => {
 
   it.each([13, 30])('accepts a snapshot with %i categories', (count) => {
     expect(parseHostMessage({ type: 'game:snapshot', snapshot: snapshotWithCategories(count) }).ok).toBe(true);
+  });
+
+  it('keeps the maximum 30-category snapshot below the transport limit', () => {
+    const message = { type: 'game:snapshot', snapshot: maxSupportedSnapshot() };
+    const bytes = new TextEncoder().encode(JSON.stringify(message));
+
+    expect(bytes.byteLength).toBeLessThan(MAX_MESSAGE_BYTES);
+    expect(parseHostMessage(message).ok).toBe(true);
   });
 
   it('rejects a snapshot with 31 categories', () => {
