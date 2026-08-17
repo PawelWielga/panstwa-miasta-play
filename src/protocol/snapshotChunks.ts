@@ -4,17 +4,8 @@ import {
   SNAPSHOT_CHUNK_ASSEMBLY_TIMEOUT_MS,
   SNAPSHOT_CHUNK_RAW_BYTES,
 } from './constants';
-import type { GameSnapshot, MessageMetadata } from './messages';
+import type { GameSnapshot, GameSnapshotChunkHostMessage } from './messages';
 import { parseSnapshot } from './validation';
-
-export interface GameSnapshotChunkMessage extends MessageMetadata {
-  type: 'game:snapshot-chunk';
-  gameId: string;
-  sequenceNumber: number;
-  chunkIndex: number;
-  chunkCount: number;
-  payload: string;
-}
 
 type SnapshotChunkAssembly = {
   gameId: string;
@@ -38,7 +29,7 @@ export class GameSnapshotChunkAssembler {
 
   reset(): void { this.assemblies.clear(); }
 
-  add(message: GameSnapshotChunkMessage): GameSnapshot | null {
+  add(message: GameSnapshotChunkHostMessage): GameSnapshot | null {
     const now = this.now();
     this.removeExpired(now);
 
