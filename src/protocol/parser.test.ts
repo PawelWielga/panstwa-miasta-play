@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_MESSAGE_BYTES } from './constants';
+import { MAX_MESSAGE_BYTES, SNAPSHOT_CHUNK_RAW_BYTES } from './constants';
+import type { GameSnapshot, GameSnapshotChunkHostMessage } from './messages';
 import { parseHostMessage } from './parser';
 import { parseCategories } from './validation';
 
@@ -44,7 +45,7 @@ function snapshotWithCategories(count: number) {
   };
 }
 
-function maxSupportedSnapshot() {
+function maxSupportedSnapshot(): GameSnapshot {
   const categories = createCategories(30);
   const players = Array.from({ length: 12 }, (_, index) => {
     const id = `p${index.toString(16).padStart(32, '0')}`;
@@ -61,10 +62,8 @@ function maxSupportedSnapshot() {
   });
   const host = players.at(0);
   const lastPlayer = players.at(-1);
-  const currentCategory = categories.at(0);
-  if (!host || !lastPlayer || !currentCategory) {
-    throw new Error('Invalid maximum snapshot fixture.');
-  }
+  if (!host || !lastPlayer) throw new Error('Invalid maximum snapshot fixture.');
+
   const hostId = host.profile.id;
   const submissions = Object.fromEntries(players.map(({ profile }) => [
     profile.id,
@@ -74,17 +73,22 @@ function maxSupportedSnapshot() {
       answers: Object.fromEntries(categories.map((category) => [category.id, 'A'.repeat(60)])),
     },
   ]));
-  const answerIds = players.map(({ profile }) => `${profile.id}::${currentCategory.id}`);
+  const answerIds = categories.flatMap((category) =>
+    players.map(({ profile }) => `${profile.id}::${category.id}`));
 
   return {
     ...snapshot,
+    gameId: 'g-max-chunked',
+    sequenceNumber: 807,
     hostPlayerId: hostId,
     phase: 'categoryResults',
     players,
     categories,
     round: {
       ...snapshot.round,
+      number: 22,
       categories,
+      categoryIndex: 29,
       deadlineAt: 123_456_789,
       answeringStartedAt: 123_450_000,
       lastCallPlayerId: lastPlayer.profile.id,
@@ -95,15 +99,38 @@ function maxSupportedSnapshot() {
     donePlayerIds: players.map(({ profile }) => profile.id),
     votes: Object.fromEntries(answerIds.map((answerId) => [answerId, { [hostId]: 'ok' }])),
     hostVoteSuggestions: Object.fromEntries(answerIds.map((answerId) => [answerId, 'ok'])),
-    reviewReady: { 0: players.map(({ profile }) => profile.id) },
+    reviewReady: Object.fromEntries(categories.map((_, index) => [
+      String(index),
+      players.map(({ profile }) => profile.id),
+    ])),
     finalResults: Object.fromEntries(answerIds.map((answerId) => [answerId, { winner: 'ok', points: 10 }])),
-    roundScores: Object.fromEntries(players.map(({ profile }) => [profile.id, 10])),
-    finalScores: Object.fromEntries(players.map(({ profile }) => [profile.id, 100])),
+    roundScores: Object.fromEntries(players.map(({ profile }) => [profile.id, 300])),
+    finalScores: Object.fromEntries(players.map(({ profile }) => [profile.id, 6_600])),
     speedBonusPlayerIds: players.slice(0, 3).map(({ profile }) => profile.id),
-    reconnectCredentialFingerprintsByPlayerId: Object.fromEntries(
-      players.map(({ profile }) => [profile.id, 'a'.repeat(64)]),
-    ),
   };
+}
+
+function snapshotChunks(value: GameSnapshot): GameSnapshotChunkHostMessage[] {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  const chunkCount = Math.ceil(bytes.byteLength / SNAPSHOT_CHUNK_RAW_BYTES);
+  return Array.from({ length: chunkCount }, (_, chunkIndex) => {
+    const start = chunkIndex * SNAPSHOT_CHUNK_RAW_BYTES;
+    const end = Math.min(start + SNAPSHOT_CHUNK_RAW_BYTES, bytes.byteLength);
+    return {
+      type: 'game:snapshot-chunk',
+      gameId: value.gameId,
+      sequenceNumber: value.sequenceNumber,
+      chunkIndex,
+      chunkCount,
+      payload: bytesToBase64(bytes.slice(start, end)),
+    };
+  });
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return globalThis.btoa(binary);
 }
 
 describe('parseHostMessage', () => {
@@ -135,12 +162,31 @@ describe('parseHostMessage', () => {
     expect(parseHostMessage({ type: 'game:snapshot', snapshot: snapshotWithCategories(count) }).ok).toBe(true);
   });
 
-  it('keeps the maximum 30-category snapshot below the transport limit', () => {
-    const message = { type: 'game:snapshot', snapshot: maxSupportedSnapshot() };
-    const bytes = new TextEncoder().encode(JSON.stringify(message));
+  it('reassembles a realistic 30-category snapshot while every chunk stays below 64 KiB', () => {
+    const largeSnapshot = maxSupportedSnapshot();
+    const legacyMessage = { type: 'game:snapshot', snapshot: largeSnapshot };
+    const legacyBytes = new TextEncoder().encode(JSON.stringify(legacyMessage));
+    const chunks = snapshotChunks(largeSnapshot);
 
-    expect(bytes.byteLength).toBeLessThan(MAX_MESSAGE_BYTES);
-    expect(parseHostMessage(message).ok).toBe(true);
+    expect(legacyBytes.byteLength).toBeGreaterThan(MAX_MESSAGE_BYTES);
+    expect(parseHostMessage(legacyMessage).ok).toBe(false);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(new TextEncoder().encode(JSON.stringify(chunk)).byteLength).toBeLessThanOrEqual(MAX_MESSAGE_BYTES);
+    }
+
+    const duplicate = parseHostMessage(chunks.at(-1));
+    expect(duplicate.ok && duplicate.message.type).toBe('game:snapshot-chunk');
+    const sameDuplicate = parseHostMessage(chunks.at(-1));
+    expect(sameDuplicate.ok && sameDuplicate.message.type).toBe('game:snapshot-chunk');
+
+    let assembled: GameSnapshot | null = null;
+    for (const chunk of [...chunks].reverse().slice(1)) {
+      const result = parseHostMessage(chunk);
+      if (result.ok && result.message.type === 'game:snapshot') assembled = result.message.snapshot;
+    }
+
+    expect(assembled).toEqual(largeSnapshot);
   });
 
   it('rejects a snapshot with 31 categories', () => {
