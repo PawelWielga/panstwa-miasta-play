@@ -91,7 +91,7 @@ export function parseHostMessage(data: unknown): HostMessageParseResult {
     }
     case 'countries-cities:results': {
       const finalResults = parseAnswerResults(data.finalResults); const roundScores = parseNumberMap(data.roundScores); const finalScores = parseNumberMap(data.finalScores);
-      return finalResults && roundScores && finalScores ? ok({ type: data.type, finalResults, roundScores, finalScores, finalScores, ...metadata }) : invalid();
+      return finalResults && roundScores && finalScores ? ok({ type: data.type, finalResults, roundScores, finalScores, ...metadata }) : invalid();
     }
   }
   return invalid();
