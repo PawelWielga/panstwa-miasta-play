@@ -26,11 +26,12 @@ it('renders 100 categories and keeps Enter navigation available', async () => {
   };
   render(<AnsweringScreen />);
 
-  const inputs = screen.getAllByRole('textbox');
-  expect(inputs).toHaveLength(100);
+  expect(screen.getAllByRole('textbox')).toHaveLength(100);
+  const firstInput = screen.getByLabelText('Kategoria 1');
+  const secondInput = screen.getByLabelText('Kategoria 2');
   expect(screen.getByLabelText('Kategoria 100')).toBeInTheDocument();
 
-  inputs[0].focus();
+  firstInput.focus();
   await userEvent.keyboard('{Enter}');
-  expect(inputs[1]).toHaveFocus();
+  expect(secondInput).toHaveFocus();
 });
