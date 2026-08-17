@@ -88,6 +88,7 @@ function reduceHostMessage(state: AppState, message: HostMessage, receivedAt: nu
     case 'game:snapshot': return isStaleSnapshot(state, message.snapshot)
       ? active
       : applySnapshot(active, message.snapshot);
+    case 'game:snapshot-chunk': return active;
     case 'host:migrated': {
       if (message.sequenceNumber < state.lastSeenSequenceNumber || isStaleSnapshot(state, message.snapshot)) return active;
       const migrated = applySnapshot(active, message.snapshot);
