@@ -18,6 +18,12 @@ export const HEARTBEAT_INTERVAL_MS = 2_000;
 export const HOST_TIMEOUT_MS = 6_000;
 export const CONNECT_TIMEOUT_MS = 15_000;
 export const AUTO_RECONNECT_WINDOW_MS = 10_000;
+export const SNAPSHOT_CHUNK_RAW_BYTES = 45 * 1024;
+export const SNAPSHOT_CHUNK_PAYLOAD_MAX_LENGTH = 62 * 1024;
+export const MAX_SNAPSHOT_BYTES = 1024 * 1024;
+export const MAX_SNAPSHOT_CHUNK_COUNT = Math.ceil(MAX_SNAPSHOT_BYTES / SNAPSHOT_CHUNK_RAW_BYTES);
+export const SNAPSHOT_CHUNK_ASSEMBLY_TIMEOUT_MS = 30_000;
+export const MAX_ACTIVE_SNAPSHOT_CHUNK_ASSEMBLIES = 4;
 
 export const clientMessageTypes = [
   'player:hello',
@@ -39,6 +45,7 @@ export const hostMessageTypes = [
   'host:migration-started',
   'host:migrated',
   'game:snapshot',
+  'game:snapshot-chunk',
   'countries-cities:settings',
   'countries-cities:start-round',
   'countries-cities:deadline',
