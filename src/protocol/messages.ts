@@ -140,6 +140,9 @@ export interface HostMigratedMessage extends MessageMetadata {
   type: 'host:migrated'; gameId: string; newHostPlayerId: string; newHostIp: string; newHostPort: number; sequenceNumber: number; snapshot: GameSnapshot;
 }
 export interface GameSnapshotMessage extends MessageMetadata { type: 'game:snapshot'; snapshot: GameSnapshot }
+export interface GameSnapshotChunkHostMessage extends MessageMetadata {
+  type: 'game:snapshot-chunk'; gameId: string; sequenceNumber: number; chunkIndex: number; chunkCount: number; payload: string;
+}
 export interface CountriesCitiesSettingsMessage extends MessageMetadata {
   type: 'countries-cities:settings'; categories: GameCategory[]; endMode: string; timeMode: string; settings: CountriesCitiesSettings; hostControlsReview: boolean;
 }
@@ -162,7 +165,7 @@ export interface CountriesCitiesResultsMessage extends MessageMetadata {
 export type HostMessage =
   | RoomPlayersMessage | GameResetMessage | GameStartMessage | GameErrorMessage
   | HostHeartbeatMessage | HostLostMessage | HostMigrationStartedMessage | HostMigratedMessage
-  | GameSnapshotMessage | CountriesCitiesSettingsMessage | CountriesCitiesStartRoundMessage
+  | GameSnapshotMessage | GameSnapshotChunkHostMessage | CountriesCitiesSettingsMessage | CountriesCitiesStartRoundMessage
   | CountriesCitiesDeadlineMessage | CountriesCitiesReviewMessage | CountriesCitiesVoteMessage
   | CountriesCitiesReviewReadyMessage | CountriesCitiesRevealMessage | CountriesCitiesResultsMessage;
 
@@ -179,9 +182,7 @@ export interface ClientRejoinMessage extends MessageMetadata {
 export interface CountriesCitiesSubmitMessage extends MessageMetadata {
   type: 'countries-cities:submit'; player: PlayerProfile; answers: Record<string, string>;
 }
-export interface CountriesCitiesEditAnswersMessage extends MessageMetadata {
-  type: 'countries-cities:edit-answers'; playerId: string;
-}
+export interface CountriesCitiesEditAnswersMessage extends MessageMetadata { type: 'countries-cities:edit-answers'; playerId: string }
 export interface CountriesCitiesWheelSpinHoldStartedMessage extends MessageMetadata {
   type: 'player:wheelSpinHoldStarted';
   hostSessionId: string;
