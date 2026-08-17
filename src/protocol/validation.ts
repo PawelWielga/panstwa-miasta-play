@@ -20,6 +20,8 @@ import { parseWheelState } from './wheel';
 
 export type UnknownRecord = Record<string, unknown>;
 
+const maxCountriesCitiesCategories = 100;
+
 export function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -76,7 +78,7 @@ function slug(value: string): string {
 }
 
 export function parseCategories(value: unknown): GameCategory[] | null {
-  if (!Array.isArray(value) || value.length === 0 || value.length > 12) return null;
+  if (!Array.isArray(value) || value.length === 0 || value.length > maxCountriesCitiesCategories) return null;
   const categories = value.map((item, index) => parseCategory(item, index));
   if (categories.some((item) => item === null)) return null;
   return (categories as GameCategory[]).sort((left, right) => left.order - right.order);

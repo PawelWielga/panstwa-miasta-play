@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseHostMessage } from './parser';
+import { parseCategories } from './validation';
 
 const snapshot = {
   gameId: 'g1', roomId: 'ABC234', sequenceNumber: 7, hostPlayerId: 'host', phase: 'answering',
@@ -24,6 +25,23 @@ const wheelState = {
   spinSeed: 123,
   finalTurns: 6,
 };
+
+function createCategories(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `category-${String(index + 1)}`,
+    name: `Kategoria ${String(index + 1)}`,
+    order: index,
+  }));
+}
+
+function snapshotWithCategories(count: number) {
+  const categories = createCategories(count);
+  return {
+    ...snapshot,
+    categories,
+    round: { ...snapshot.round, categories },
+  };
+}
 
 describe('parseHostMessage', () => {
   it('parses a valid snapshot', () => {
@@ -50,6 +68,28 @@ describe('parseHostMessage', () => {
     expect(parseHostMessage({ type: 'game:snapshot', snapshot }).ok).toBe(true);
   });
 
+  it.each([13, 100])('accepts a snapshot with %i categories', (count) => {
+    expect(parseHostMessage({ type: 'game:snapshot', snapshot: snapshotWithCategories(count) }).ok).toBe(true);
+  });
+
+  it('rejects a snapshot with 101 categories', () => {
+    expect(parseHostMessage({ type: 'game:snapshot', snapshot: snapshotWithCategories(101) }).ok).toBe(false);
+  });
+
   it('rejects malformed reserved messages', () => expect(parseHostMessage({ type: 'game:snapshot', snapshot: { phase: 'hacked' } }).ok).toBe(false));
   it('rejects unknown types', () => expect(parseHostMessage({ type: 'custom:event' }).ok).toBe(false));
+});
+
+describe('parseCategories', () => {
+  it.each([12, 13, 100])('accepts %i categories', (count) => {
+    expect(parseCategories(createCategories(count))).toHaveLength(count);
+  });
+
+  it('rejects an empty category list', () => {
+    expect(parseCategories([])).toBeNull();
+  });
+
+  it('rejects 101 categories', () => {
+    expect(parseCategories(createCategories(101))).toBeNull();
+  });
 });

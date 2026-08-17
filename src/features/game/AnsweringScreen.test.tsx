@@ -13,3 +13,24 @@ it('collects category answers and submits them', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Wyślij odpowiedzi' }));
   expect(mocked.value.actions.submitAnswers).toHaveBeenCalled();
 });
+
+it('renders 100 categories and keeps Enter navigation available', async () => {
+  const categories = Array.from({ length: 100 }, (_, index) => ({
+    id: `category-${String(index + 1)}`,
+    name: `Kategoria ${String(index + 1)}`,
+    order: index,
+  }));
+  mocked.value = {
+    state: appState({ categories }),
+    actions: appActions(),
+  };
+  render(<AnsweringScreen />);
+
+  const inputs = screen.getAllByRole('textbox');
+  expect(inputs).toHaveLength(100);
+  expect(screen.getByLabelText('Kategoria 100')).toBeInTheDocument();
+
+  inputs[0].focus();
+  await userEvent.keyboard('{Enter}');
+  expect(inputs[1]).toHaveFocus();
+});
