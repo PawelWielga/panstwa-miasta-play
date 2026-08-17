@@ -7,7 +7,7 @@ import {
 } from './constants';
 import { encodedMessageSize } from './messageSize';
 import type { HostMessage, JsonValue } from './messages';
-import type { GameSnapshotChunkMessage } from './snapshotChunks';
+import { GameSnapshotChunkAssembler, type GameSnapshotChunkMessage } from './snapshotChunks';
 import {
   hasValidMetadata, isBoundedString, isFiniteNumber, isInteger, isJsonValue, isRecord,
   parseAnswerResults, parseCategories, parseNumberMap, parsePlayerProfile, parseSettings,
@@ -15,6 +15,7 @@ import {
 } from './validation';
 
 const knownTypes = new Set<string>(hostMessageTypes);
+const snapshotChunkAssembler = new GameSnapshotChunkAssembler();
 
 export type ParsedHostMessage = HostMessage | GameSnapshotChunkMessage;
 export type HostMessageParseResult = { ok: true; message: ParsedHostMessage } | { ok: false; reason: string };
@@ -54,7 +55,8 @@ export function parseHostMessage(data: unknown): HostMessageParseResult {
         && isInteger(data.chunkCount) && data.chunkCount > 0 && data.chunkCount <= MAX_SNAPSHOT_CHUNK_COUNT
         && data.chunkIndex < data.chunkCount
         && isBoundedString(data.payload, SNAPSHOT_CHUNK_PAYLOAD_MAX_LENGTH);
-      return valid ? ok({
+      if (!valid) return invalid();
+      const chunk: GameSnapshotChunkMessage = {
         type: data.type,
         gameId: data.gameId,
         sequenceNumber: data.sequenceNumber,
@@ -62,7 +64,9 @@ export function parseHostMessage(data: unknown): HostMessageParseResult {
         chunkCount: data.chunkCount,
         payload: data.payload,
         ...metadata,
-      }) : invalid();
+      };
+      const snapshot = snapshotChunkAssembler.add(chunk);
+      return snapshot ? ok({ type: 'game:snapshot', snapshot, ...metadata }) : ok(chunk);
     }
     case 'countries-cities:settings': {
       const categories = parseCategories(data.categories); const settings = parseSettings(data.settings);
