@@ -15,6 +15,7 @@ export const ANSWER_MAX_LENGTH = 60;
 export const CATEGORY_NAME_MAX_LENGTH = 64;
 export const CATEGORY_ID_MAX_LENGTH = 64;
 export const MAX_COUNTRIES_CITIES_CATEGORIES = 30;
+export const MAX_COUNTRIES_CITIES_PLAYERS = 12;
 export const ROOM_CODE_LENGTH = 6;
 export const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/;
 export const HEARTBEAT_INTERVAL_MS = 2_000;

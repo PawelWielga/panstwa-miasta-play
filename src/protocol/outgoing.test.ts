@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SUPPORTED_GAME_PROTOCOL_VERSION } from './constants';
-import { createPlayerHello, createRejoin, createStartWheelSpin, createWheelSpinHoldStarted } from './outgoing';
+import { MAX_MESSAGE_BYTES, SUPPORTED_GAME_PROTOCOL_VERSION } from './constants';
+import { createFinalizationSubmit, createPlayerHello, createRejoin, createStartWheelSpin, createSubmit, createWheelSpinHoldStarted } from './outgoing';
 
 const profile = { id: 'player-1', name: 'Ala', color: '#6d4aff', emoji: '🦊' };
 
@@ -17,6 +17,31 @@ describe('outgoing protocol version', () => {
       type: 'client:rejoin',
       protocolVersion: SUPPORTED_GAME_PROTOCOL_VERSION,
     });
+  });
+});
+
+describe('countries-cities submit bounds', () => {
+  it('builds a tagged finalization submit with a reusable requestId', () => {
+    const message = createFinalizationSubmit(profile, { city: 'Augustów' }, 3, 'final-3', 'request-fixed');
+    expect(message).toEqual({
+      type: 'countries-cities:submit',
+      player: profile,
+      answers: { city: 'Augustów' },
+      roundNumber: 3,
+      finalizationId: 'final-3',
+      senderId: profile.id,
+      requestId: 'request-fixed',
+    });
+    expect(createFinalizationSubmit(profile, { city: 'Augustów' }, 3, 'final-3', 'request-fixed')).toEqual(message);
+  });
+
+  it('rejects oversized answer maps and keeps a 30-answer multibyte payload below 64 KiB', () => {
+    const answers = Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`category-${String(index + 1)}`, 'Ż'.repeat(60)]));
+    const message = createSubmit(profile, answers);
+    expect(new TextEncoder().encode(JSON.stringify(message)).byteLength).toBeLessThanOrEqual(MAX_MESSAGE_BYTES);
+    expect(() => createSubmit(profile, { ...answers, extra: 'A' })).toThrow();
+    expect(() => createSubmit(profile, { ['k'.repeat(65)]: 'A' })).toThrow();
+    expect(() => createSubmit(profile, { city: 'A'.repeat(61) })).toThrow();
   });
 });
 

@@ -206,4 +206,46 @@ describe('gameReducer', () => {
     expect(stale.notice).toBeNull();
     expect(stale.lastHostActivityAt).toBe(30);
   });
+  it('keeps a newer local draft when the same-round snapshot still contains an older submission', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('11111111-1111-4111-8111-111111111111');
+    const initial = createInitialState(createPlayerIdentity(), null);
+    const firstSnapshot = createSnapshot(initial.identity.profile, 1, 'answering');
+    firstSnapshot.submissions[initial.identity.playerId] = {
+      playerId: initial.identity.playerId,
+      playerName: initial.identity.profile.name,
+      answers: { city: 'Augustów' },
+    };
+    const fromHost = gameReducer(initial, { type: 'host-message', receivedAt: 10, message: { type: 'game:snapshot', snapshot: firstSnapshot } });
+    const edited = gameReducer(fromHost, { type: 'answer', categoryId: 'city', value: 'Białystok' });
+    const nextSnapshot = createSnapshot(initial.identity.profile, 2, 'answering');
+    nextSnapshot.submissions[initial.identity.playerId] = {
+      playerId: initial.identity.playerId,
+      playerName: initial.identity.profile.name,
+      answers: { city: 'Augustów' },
+    };
+
+    const merged = gameReducer(edited, { type: 'host-message', receivedAt: 20, message: { type: 'game:snapshot', snapshot: nextSnapshot } });
+    expect(merged.answers.city).toBe('Białystok');
+    expect(merged.answersSubmitted).toBe(false);
+    expect(merged.hasLocalAnswerDraft).toBe(true);
+  });
+
+  it('uses the host submission once the player is done', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('11111111-1111-4111-8111-111111111111');
+    const initial = createInitialState(createPlayerIdentity(), null);
+    const local = gameReducer(initial, { type: 'answer', categoryId: 'city', value: 'Białystok' });
+    const authoritative = createSnapshot(initial.identity.profile, 2, 'answering');
+    authoritative.submissions[initial.identity.playerId] = {
+      playerId: initial.identity.playerId,
+      playerName: initial.identity.profile.name,
+      answers: { city: 'Augustów' },
+    };
+    authoritative.donePlayerIds = [initial.identity.playerId];
+
+    const merged = gameReducer(local, { type: 'host-message', receivedAt: 20, message: { type: 'game:snapshot', snapshot: authoritative } });
+    expect(merged.answers.city).toBe('Augustów');
+    expect(merged.answersSubmitted).toBe(true);
+    expect(merged.hasLocalAnswerDraft).toBe(false);
+  });
+
 });

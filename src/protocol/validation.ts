@@ -1,7 +1,9 @@
 import {
+  ANSWER_MAX_LENGTH,
   CATEGORY_ID_MAX_LENGTH,
   CATEGORY_NAME_MAX_LENGTH,
   MAX_COUNTRIES_CITIES_CATEGORIES,
+  MAX_COUNTRIES_CITIES_PLAYERS,
   PLAYER_COLOR_MAX_LENGTH,
   PLAYER_EMOJI_MAX_LENGTH,
   PLAYER_ID_MAX_LENGTH,
@@ -9,6 +11,8 @@ import {
   REQUEST_ID_MAX_LENGTH,
 } from './constants';
 import type {
+  AnswerFinalizationTrigger,
+  CountriesCitiesAnswerFinalization,
   CountriesCitiesAnswerResult,
   CountriesCitiesRound,
   CountriesCitiesSettings,
@@ -122,9 +126,21 @@ export function parseNumberMap(value: unknown): Record<string, number> | null {
   return result;
 }
 
+export function parseSubmissionAnswers(value: unknown): Record<string, string> | null {
+  if (!isRecord(value)) return null;
+  const entries = Object.entries(value);
+  if (entries.length > MAX_COUNTRIES_CITIES_CATEGORIES) return null;
+  const answers: Record<string, string> = {};
+  for (const [key, item] of entries) {
+    if (!isBoundedString(key, CATEGORY_ID_MAX_LENGTH) || typeof item !== 'string' || item.length > ANSWER_MAX_LENGTH) return null;
+    answers[key] = item;
+  }
+  return answers;
+}
+
 export function parseSubmission(value: unknown): CountriesCitiesSubmission | null {
   if (!isRecord(value) || !isBoundedString(value.playerId, PLAYER_ID_MAX_LENGTH) || !isBoundedString(value.playerName, PLAYER_NAME_MAX_LENGTH)) return null;
-  const answers = parseStringMap(value.answers);
+  const answers = parseSubmissionAnswers(value.answers);
   if (!answers) return null;
   return { playerId: value.playerId, playerName: value.playerName, answers };
 }
@@ -208,6 +224,40 @@ function parseReviewReady(value: unknown): Record<string, string[]> | null {
   return result;
 }
 
+const answerFinalizationTriggers = new Set<AnswerFinalizationTrigger>(['deadline', 'manual', 'all-submitted']);
+
+function parseAnswerFinalization(
+  value: unknown,
+  players: ReplicatedPlayerState[],
+): CountriesCitiesAnswerFinalization | null {
+  if (!isRecord(value)
+    || !isBoundedString(value.id, REQUEST_ID_MAX_LENGTH)
+    || !isInteger(value.roundNumber)
+    || value.roundNumber < 1
+    || !isFiniteNumber(value.requestedAt)
+    || !isFiniteNumber(value.expiresAt)
+    || value.expiresAt < value.requestedAt
+    || typeof value.trigger !== 'string'
+    || !answerFinalizationTriggers.has(value.trigger as AnswerFinalizationTrigger)
+    || !Array.isArray(value.expectedPlayerIds)
+    || value.expectedPlayerIds.length > MAX_COUNTRIES_CITIES_PLAYERS
+    || !value.expectedPlayerIds.every((playerId) => isBoundedString(playerId, PLAYER_ID_MAX_LENGTH))) return null;
+
+  const expectedPlayerIds = [...value.expectedPlayerIds] as string[];
+  if (new Set(expectedPlayerIds).size !== expectedPlayerIds.length) return null;
+  const knownPlayerIds = new Set(players.map((player) => player.profile.id));
+  if (!expectedPlayerIds.every((playerId) => knownPlayerIds.has(playerId))) return null;
+
+  return {
+    id: value.id,
+    roundNumber: value.roundNumber,
+    requestedAt: value.requestedAt,
+    expiresAt: value.expiresAt,
+    trigger: value.trigger as AnswerFinalizationTrigger,
+    expectedPlayerIds,
+  };
+}
+
 export function parseSnapshot(value: unknown): GameSnapshot | null {
   if (!isRecord(value) || typeof value.gameId !== 'string' || typeof value.roomId !== 'string' || !isInteger(value.sequenceNumber) || typeof value.hostPlayerId !== 'string' || typeof value.endMode !== 'string' || typeof value.timeMode !== 'string' || typeof value.hostControlsReview !== 'boolean') return null;
   const phase = parsePhase(value.phase);
@@ -216,6 +266,8 @@ export function parseSnapshot(value: unknown): GameSnapshot | null {
   const settings = parseSettings(value.settings);
   const round = value.round === null ? null : parseRound(value.round);
   const wheelState = value.wheelState === undefined ? undefined : parseWheelState(value.wheelState);
+  const parsedPlayers = players.filter((player): player is ReplicatedPlayerState => player !== null);
+  const answerFinalization = value.answerFinalization === undefined ? undefined : parseAnswerFinalization(value.answerFinalization, parsedPlayers);
   const submissions = parseSubmissionMap(value.submissions ?? {});
   const submittedAtByPlayerId = parseNumberMap(value.submittedAtByPlayerId ?? {});
   const votes = parseNestedStringMap(value.votes ?? {});
@@ -228,11 +280,13 @@ export function parseSnapshot(value: unknown): GameSnapshot | null {
   const letterHistory = parseStringList(value.letterHistory);
   const donePlayerIds = parseStringList(value.donePlayerIds);
   const speedBonusPlayerIds = parseStringList(value.speedBonusPlayerIds);
-  if (!phase || players.some((item) => item === null) || !categories || !settings || (value.round !== null && !round) || (value.wheelState !== undefined && !wheelState) || !submissions || !submittedAtByPlayerId || !votes || !hostVoteSuggestions || !reviewReady || !finalResults || !roundScores || !finalScores || !usedLetters || !letterHistory || !donePlayerIds || !speedBonusPlayerIds) return null;
+  if (!phase || players.some((item) => item === null) || !categories || !settings || (value.round !== null && !round) || (value.wheelState !== undefined && !wheelState) || (value.answerFinalization !== undefined && !answerFinalization) || !submissions || !submittedAtByPlayerId || !votes || !hostVoteSuggestions || !reviewReady || !finalResults || !roundScores || !finalScores || !usedLetters || !letterHistory || !donePlayerIds || !speedBonusPlayerIds) return null;
+  if (answerFinalization && (phase !== 'answering' || !round || answerFinalization.roundNumber !== round.number)) return null;
   return {
     gameId: value.gameId, roomId: value.roomId, sequenceNumber: value.sequenceNumber, hostPlayerId: value.hostPlayerId, phase,
-    players: players as ReplicatedPlayerState[], categories, usedLetters, letterHistory, round,
+    players: parsedPlayers, categories, usedLetters, letterHistory, round,
     ...(wheelState ? { wheelState } : {}),
+    ...(answerFinalization ? { answerFinalization } : {}),
     endMode: value.endMode, timeMode: value.timeMode, settings, hostControlsReview: value.hostControlsReview, submissions, submittedAtByPlayerId,
     donePlayerIds, votes, hostVoteSuggestions, reviewReady, finalResults, roundScores, finalScores,
     speedBonusPlayerIds,

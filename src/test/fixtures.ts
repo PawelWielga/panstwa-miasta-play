@@ -21,7 +21,7 @@ export function appState(overrides: Partial<AppState> = {}): AppState {
     players: [identity.profile, { id: 'host', name: 'Host', emoji: '🎲', color: '#000000' }], snapshot: null,
     categories: [{ id: 'city', name: 'Miasto', order: 0 }], settings: { answerDurationSeconds: 90, roundCount: 5, maxPlayers: 8, speedBonusEnabled: false },
     hostControlsReview: true, currentLetter: 'A', deadlineAt: null, reviewSubmissions: [], reviewCategoryIndex: 0, revealResults: {}, roundScores: {}, finalScores: {},
-    answers: {}, answersSubmitted: false, localReady: false, pendingWheelSpinRequestKey: null,
+    answers: {}, answersSubmitted: false, hasLocalAnswerDraft: false, localReady: false, pendingWheelSpinRequestKey: null,
     lastHostActivityAt: Date.now(), lastSeenSequenceNumber: 1, gameId: 'g1', notice: null,
     ...overrides,
   };

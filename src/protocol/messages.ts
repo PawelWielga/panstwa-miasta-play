@@ -70,6 +70,17 @@ export interface CountriesCitiesSubmission {
   answers: Record<string, string>;
 }
 
+export type AnswerFinalizationTrigger = 'deadline' | 'manual' | 'all-submitted';
+
+export interface CountriesCitiesAnswerFinalization {
+  id: string;
+  roundNumber: number;
+  requestedAt: number;
+  expiresAt: number;
+  trigger: AnswerFinalizationTrigger;
+  expectedPlayerIds: string[];
+}
+
 export interface CountriesCitiesAnswerResult {
   winner: string;
   points: number;
@@ -97,6 +108,7 @@ export interface GameSnapshot {
   letterHistory: string[];
   round: CountriesCitiesRound | null;
   wheelState?: CountriesCitiesWheelState;
+  answerFinalization?: CountriesCitiesAnswerFinalization;
   endMode: string;
   timeMode: string;
   settings: CountriesCitiesSettings;
@@ -180,7 +192,7 @@ export interface ClientRejoinMessage extends MessageMetadata {
   type: 'client:rejoin'; protocolVersion: number; player: PlayerProfile; lastSeenSequenceNumber: number;
 }
 export interface CountriesCitiesSubmitMessage extends MessageMetadata {
-  type: 'countries-cities:submit'; player: PlayerProfile; answers: Record<string, string>;
+  type: 'countries-cities:submit'; player: PlayerProfile; answers: Record<string, string>; roundNumber?: number; finalizationId?: string;
 }
 export interface CountriesCitiesEditAnswersMessage extends MessageMetadata { type: 'countries-cities:edit-answers'; playerId: string }
 export interface CountriesCitiesWheelSpinHoldStartedMessage extends MessageMetadata {

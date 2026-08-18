@@ -154,6 +154,27 @@ describe('parseHostMessage', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('parses a valid answer finalization and rejects invalid snapshot invariants', () => {
+    const finalization = {
+      id: 'final-1',
+      roundNumber: 1,
+      requestedAt: 1_000,
+      expiresAt: 3_000,
+      trigger: 'deadline',
+      expectedPlayerIds: ['host'],
+    };
+    const valid = parseHostMessage({ type: 'game:snapshot', snapshot: { ...snapshot, answerFinalization: finalization } });
+    expect(valid.ok).toBe(true);
+    if (valid.ok && valid.message.type === 'game:snapshot') expect(valid.message.snapshot.answerFinalization).toEqual(finalization);
+
+    expect(parseHostMessage({ type: 'game:snapshot', snapshot: { ...snapshot, phase: 'categoryReview', answerFinalization: finalization } }).ok).toBe(false);
+    expect(parseHostMessage({ type: 'game:snapshot', snapshot: { ...snapshot, answerFinalization: { ...finalization, roundNumber: 2 } } }).ok).toBe(false);
+    expect(parseHostMessage({ type: 'game:snapshot', snapshot: { ...snapshot, answerFinalization: { ...finalization, expiresAt: 999 } } }).ok).toBe(false);
+    expect(parseHostMessage({ type: 'game:snapshot', snapshot: { ...snapshot, answerFinalization: { ...finalization, trigger: 'other' } } }).ok).toBe(false);
+    expect(parseHostMessage({ type: 'game:snapshot', snapshot: { ...snapshot, answerFinalization: { ...finalization, expectedPlayerIds: ['missing'] } } }).ok).toBe(false);
+    expect(parseHostMessage({ type: 'game:snapshot', snapshot: { ...snapshot, answerFinalization: { ...finalization, expectedPlayerIds: ['host', 'host'] } } }).ok).toBe(false);
+  });
+
   it('keeps snapshots from older hosts valid when wheelState is absent', () => {
     expect(parseHostMessage({ type: 'game:snapshot', snapshot }).ok).toBe(true);
   });
@@ -187,6 +208,32 @@ describe('parseHostMessage', () => {
     }
 
     expect(assembled).toEqual(largeSnapshot);
+  });
+
+  it('reassembles a chunked snapshot with active answer finalization', () => {
+    const base = maxSupportedSnapshot();
+    const finalizingSnapshot: GameSnapshot = {
+      ...base,
+      gameId: 'g-finalization-chunked',
+      sequenceNumber: 901,
+      phase: 'answering',
+      answerFinalization: {
+        id: 'final-22',
+        roundNumber: 22,
+        requestedAt: 123_456_789,
+        expiresAt: 123_458_789,
+        trigger: 'deadline',
+        expectedPlayerIds: base.players.map((player) => player.profile.id),
+      },
+    };
+    const chunks = snapshotChunks(finalizingSnapshot);
+    expect(chunks.length).toBeGreaterThan(1);
+    let assembled: GameSnapshot | null = null;
+    for (const chunk of chunks) {
+      const result = parseHostMessage(chunk);
+      if (result.ok && result.message.type === 'game:snapshot') assembled = result.message.snapshot;
+    }
+    expect(assembled?.answerFinalization).toEqual(finalizingSnapshot.answerFinalization);
   });
 
   it('rejects a snapshot with 31 categories', () => {
