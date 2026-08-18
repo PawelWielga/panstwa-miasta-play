@@ -709,7 +709,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       window.clearTimeout(answerDraftTimerRef.current);
       answerDraftTimerRef.current = 0;
     };
-  }, [state.answers, state.gameId, state.joinParameters, state.snapshot?.phase, state.snapshot?.round?.number, flushCurrentAnswerDraft]);
+  }, [state.answers, state.gameId, state.joinParameters, state.snapshot?.phase, state.snapshot?.round, flushCurrentAnswerDraft]);
 
   useEffect(() => {
     if (state.snapshot?.phase !== 'answering' || state.deadlineAt === null) return undefined;
