@@ -1,4 +1,7 @@
 import {
+  CATEGORY_ID_MAX_LENGTH,
+  CATEGORY_NAME_MAX_LENGTH,
+  MAX_COUNTRIES_CITIES_CATEGORIES,
   PLAYER_COLOR_MAX_LENGTH,
   PLAYER_EMOJI_MAX_LENGTH,
   PLAYER_ID_MAX_LENGTH,
@@ -20,7 +23,6 @@ import { parseWheelState } from './wheel';
 
 export type UnknownRecord = Record<string, unknown>;
 
-const maxCountriesCitiesCategories = 30;
 
 export function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -60,15 +62,20 @@ export function parsePlayerProfile(value: unknown): PlayerProfile | null {
 }
 
 export function parseCategory(value: unknown, fallbackOrder = 0): GameCategory | null {
-  if (typeof value === 'string' && value.trim()) {
+  if (typeof value === 'string') {
     const name = value.trim();
-    return { id: slug(name), name, order: fallbackOrder };
+    if (!name || name.length > CATEGORY_NAME_MAX_LENGTH) return null;
+    const id = slug(name);
+    if (id.length > CATEGORY_ID_MAX_LENGTH) return null;
+    return { id, name, order: fallbackOrder };
   }
   if (!isRecord(value)) return null;
   const nameValue = typeof value.name === 'string' ? value.name : value.label;
   if (typeof nameValue !== 'string' || !nameValue.trim()) return null;
   const name = nameValue.trim();
+  if (name.length > CATEGORY_NAME_MAX_LENGTH) return null;
   const id = typeof value.id === 'string' && value.id.trim() ? value.id.trim() : slug(name);
+  if (id.length > CATEGORY_ID_MAX_LENGTH) return null;
   const order = isInteger(value.order) ? value.order : fallbackOrder;
   return { id, name, order };
 }
@@ -78,7 +85,7 @@ function slug(value: string): string {
 }
 
 export function parseCategories(value: unknown): GameCategory[] | null {
-  if (!Array.isArray(value) || value.length === 0 || value.length > maxCountriesCitiesCategories) return null;
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_COUNTRIES_CITIES_CATEGORIES) return null;
   const categories = value.map((item, index) => parseCategory(item, index));
   if (categories.some((item) => item === null)) return null;
   return (categories as GameCategory[]).sort((left, right) => left.order - right.order);

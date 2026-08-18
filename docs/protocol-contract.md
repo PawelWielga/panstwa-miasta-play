@@ -179,6 +179,8 @@ Pełny `PM4-...` pozostaje parsowalny dla zgodności starszych linków i QR. Nie
 
 - maksymalny rozmiar wiadomości: 64 KiB po serializacji UTF-8,
 - maksymalna długość odpowiedzi: 60 znaków,
+- nazwa kategorii: maksymalnie 64 znaki,
+- identyfikator kategorii: maksymalnie 64 znaki,
 - kod pokoju: 6 znaków z alfabetu `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`,
 - nazwa gracza: maksymalnie 24 znaki,
 - heartbeat klienta: co 2 sekundy,

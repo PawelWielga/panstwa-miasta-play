@@ -202,6 +202,22 @@ describe('parseCategories', () => {
     expect(parseCategories(createCategories(count))).toHaveLength(count);
   });
 
+  it('accepts category names and ids at the 64-character boundary', () => {
+    const name = 'N'.repeat(64);
+    const id = 'i'.repeat(64);
+
+    expect(parseCategories([{ id, name, order: 0 }])).toEqual([{ id, name, order: 0 }]);
+    expect(parseCategories([name])).toHaveLength(1);
+  });
+
+  it('rejects category names and ids longer than 64 characters', () => {
+    const validName = 'N'.repeat(64);
+
+    expect(parseCategories([{ id: 'id', name: `${validName}!`, order: 0 }])).toBeNull();
+    expect(parseCategories([{ id: 'i'.repeat(65), name: validName, order: 0 }])).toBeNull();
+    expect(parseCategories([`${validName}!`])).toBeNull();
+  });
+
   it('rejects an empty category list', () => {
     expect(parseCategories([])).toBeNull();
   });
