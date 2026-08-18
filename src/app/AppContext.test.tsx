@@ -564,7 +564,9 @@ describe('AppProvider connection lifecycle', () => {
     act(() => { actions.setAnswer('city', 'Augustów'); });
     const finalization = { id: 'final-1', roundNumber: 1, requestedAt: 10, expiresAt: 20, trigger: 'manual' as const, expectedPlayerIds: [player.id] };
     act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot: answeringSnapshot(player, 2, { answerFinalization: finalization }) }); });
-    act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot: answeringSnapshot(player, 3, { phase: 'categoryReview', answerFinalization: undefined }) }); });
+    const reviewSnapshot = answeringSnapshot(player, 3, { phase: 'categoryReview' });
+    delete reviewSnapshot.answerFinalization;
+    act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot: reviewSnapshot }); });
 
     const submits = getTransport(transports, 0).send.mock.calls.map(([message]) => message)
       .filter((message) => message.type === 'countries-cities:submit');
