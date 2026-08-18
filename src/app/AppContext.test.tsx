@@ -2,7 +2,7 @@ import { act, render } from '@testing-library/react';
 import { useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HostVersionUnsupportedError } from '../config/hostCompatibility';
-import type { ClientMessage, HostMessage } from '../protocol/messages';
+import type { ClientMessage, GameSnapshot, HostMessage } from '../protocol/messages';
 import { connectionFailureCodeForGameError, connectionFailureCodes } from '../protocol/connectionFailure';
 import type { JoinParameters } from '../features/connection/joinParams';
 import { joinParameters } from '../test/fixtures';
@@ -93,6 +93,54 @@ function getTransport(transports: DeferredTransport[], index: number): DeferredT
   const transport = transports[index];
   if (!transport) throw new Error(`Missing transport at index ${String(index)}.`);
   return transport;
+}
+
+
+function answeringSnapshot(
+  player: AppState['identity']['profile'],
+  sequenceNumber: number,
+  overrides: Partial<GameSnapshot> = {},
+): GameSnapshot {
+  const categories = [{ id: 'city', name: 'Miasto', order: 0 }];
+  return {
+    gameId: 'game-finalization',
+    roomId: joinParameters.roomId,
+    sequenceNumber,
+    hostPlayerId: 'host',
+    phase: 'answering',
+    players: [
+      { profile: player, joinedAt: 1, connected: true },
+      { profile: { id: 'host', name: 'Host', color: '#000000', emoji: '🎲' }, joinedAt: 0, connected: true },
+    ],
+    categories,
+    usedLetters: ['A'],
+    letterHistory: ['A'],
+    round: {
+      number: 1,
+      letter: 'A',
+      usedLetters: ['A'],
+      categories,
+      deadlineAt: Date.now() + 60_000,
+      answeringStartedAt: Date.now(),
+      lastCallPlayerId: null,
+      categoryIndex: 0,
+    },
+    endMode: 'rounds',
+    timeMode: 'fixed',
+    settings: { answerDurationSeconds: 90, roundCount: 5, maxPlayers: 8, speedBonusEnabled: false },
+    hostControlsReview: true,
+    submissions: {},
+    submittedAtByPlayerId: {},
+    donePlayerIds: [],
+    votes: {},
+    hostVoteSuggestions: {},
+    reviewReady: {},
+    finalResults: {},
+    roundScores: {},
+    finalScores: {},
+    speedBonusPlayerIds: [],
+    ...overrides,
+  };
 }
 
 describe('AppProvider connection lifecycle', () => {
@@ -400,4 +448,128 @@ describe('AppProvider connection lifecycle', () => {
       expect.objectContaining({ type: 'client:rejoin' }),
     );
   });
+
+  it('freezes the current draft and reuses the same tagged submit for repeated finalization snapshots', async () => {
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+    const player = currentState.identity.profile;
+    act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot: answeringSnapshot(player, 1) }); });
+    act(() => { actions.setAnswer('city', 'Augustów'); });
+    expect(currentState.answers.city).toBe('Augustów');
+
+    const finalization = {
+      id: 'final-1', roundNumber: 1, requestedAt: Date.now(), expiresAt: Date.now() + 2_000,
+      trigger: 'deadline' as const, expectedPlayerIds: [player.id],
+    };
+    act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot: answeringSnapshot(player, 2, { answerFinalization: finalization }) }); });
+    const first = getTransport(transports, 0).send.mock.calls.map(([message]) => message)
+      .filter((message) => message.type === 'countries-cities:submit').at(-1);
+    expect(first).toMatchObject({
+      type: 'countries-cities:submit',
+      senderId: player.id,
+      answers: { city: 'Augustów' },
+      roundNumber: 1,
+      finalizationId: 'final-1',
+    });
+    expect(first?.requestId).toBeTruthy();
+
+    act(() => { actions.setAnswer('city', 'Białystok'); });
+    expect(currentState.answers.city).toBe('Augustów');
+    act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot: answeringSnapshot(player, 3, { answerFinalization: finalization }) }); });
+    const submits = getTransport(transports, 0).send.mock.calls.map(([message]) => message)
+      .filter((message) => message.type === 'countries-cities:submit');
+    expect(submits).toHaveLength(2);
+    expect(submits[1]).toMatchObject({ answers: { city: 'Augustów' }, requestId: first?.requestId, finalizationId: 'final-1' });
+  });
+
+  it('blocks answer mutation after the authoritative/local deadline', async () => {
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+    const player = currentState.identity.profile;
+    const snapshot = answeringSnapshot(player, 1);
+    if (!snapshot.round) throw new Error('Missing round fixture.');
+    snapshot.round.deadlineAt = Date.now() - 1;
+    act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot }); });
+    act(() => { actions.setAnswer('city', 'Augustów'); actions.submitAnswers(); actions.editAnswers(); });
+    expect(currentState.answers).toEqual({});
+    expect(getTransport(transports, 0).send.mock.calls.map(([message]) => message.type)).not.toContain('countries-cities:submit');
+    expect(getTransport(transports, 0).send.mock.calls.map(([message]) => message.type)).not.toContain('countries-cities:edit-answers');
+  });
+
+  it('sends exactly one untagged late submit for an old host that jumps directly to review', async () => {
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+    const player = currentState.identity.profile;
+    act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot: answeringSnapshot(player, 1) }); });
+    act(() => { actions.setAnswer('city', 'Augustów'); });
+    act(() => {
+      getTransport(transports, 0).emitMessage({
+        type: 'game:snapshot',
+        snapshot: answeringSnapshot(player, 2, { phase: 'categoryReview' }),
+      });
+    });
+    const submits = getTransport(transports, 0).send.mock.calls.map(([message]) => message)
+      .filter((message) => message.type === 'countries-cities:submit');
+    expect(submits).toHaveLength(1);
+    expect(submits[0]).toMatchObject({ answers: { city: 'Augustów' }, senderId: player.id });
+    expect(submits[0]).not.toHaveProperty('finalizationId');
+    expect(submits[0]).not.toHaveProperty('roundNumber');
+  });
+
+  it('does not send a late legacy submit after an answer finalization was observed', async () => {
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+    const player = currentState.identity.profile;
+    act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot: answeringSnapshot(player, 1) }); });
+    act(() => { actions.setAnswer('city', 'Augustów'); });
+    const finalization = { id: 'final-1', roundNumber: 1, requestedAt: 10, expiresAt: 20, trigger: 'manual' as const, expectedPlayerIds: [player.id] };
+    act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot: answeringSnapshot(player, 2, { answerFinalization: finalization }) }); });
+    act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot: answeringSnapshot(player, 3, { phase: 'categoryReview', answerFinalization: undefined }) }); });
+
+    const submits = getTransport(transports, 0).send.mock.calls.map(([message]) => message)
+      .filter((message) => message.type === 'countries-cities:submit');
+    expect(submits).toHaveLength(1);
+    expect(submits[0]).toMatchObject({ finalizationId: 'final-1', roundNumber: 1 });
+  });
+
 });

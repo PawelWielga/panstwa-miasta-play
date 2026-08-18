@@ -20,8 +20,8 @@ import { isHostVersionUnsupportedError } from '../config/hostCompatibility';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
 import { isTerminalJoinError } from '../protocol/gameErrors';
 import { connectionFailureCodes } from '../protocol/connectionFailure';
-import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createStartWheelSpin, createSubmit, createWheelSpinHoldCancelled, createWheelSpinHoldStarted } from '../protocol/outgoing';
-import type { ClientMessage, CountriesCitiesWheelState, HostMessage } from '../protocol/messages';
+import { createEditAnswers, createFinalizationSubmit, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createStartWheelSpin, createSubmit, createWheelSpinHoldCancelled, createWheelSpinHoldStarted } from '../protocol/outgoing';
+import type { ClientMessage, CountriesCitiesWheelState, GameSnapshot, HostMessage } from '../protocol/messages';
 import { wheelSpinRequestKey } from '../protocol/wheel';
 import { isPeerJsAuthenticationError, PeerJsGameTransport } from '../peer/PeerJsGameTransport';
 import { canAutoReconnect, reconnectDelay } from '../peer/reconnectPolicy';
@@ -34,8 +34,16 @@ import {
   saveUnfinishedMultiplayerSession,
   type UnfinishedMultiplayerSession,
 } from '../storage/unfinishedMultiplayerSessionStorage';
+import {
+  readAnswerDraft,
+  removeAnswerDraft,
+  saveAnswerDraft,
+  type AnswerDraftScope,
+  type FrozenFinalizationResponse,
+} from '../storage/answerDraftStorage';
 
 const UNFINISHED_SESSION_REFRESH_INTERVAL_MS = 60_000;
+const ANSWER_DRAFT_DEBOUNCE_MS = 200;
 
 export interface AppActions {
   updateIdentity: (values: Pick<StoredPlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>) => PlayerIdentity;
@@ -82,6 +90,10 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     storageUnavailable: false,
   });
   const wheelSpinHoldRef = useRef<{ key: string; holdId: string; wheelState: CountriesCitiesWheelState } | null>(null);
+  const frozenFinalizationRef = useRef<FrozenFinalizationResponse | null>(null);
+  const seenFinalizationRef = useRef<{ gameId: string; roundNumber: number } | null>(null);
+  const legacyFallbackSentRef = useRef<string | null>(null);
+  const answerDraftTimerRef = useRef(0);
   const factoryRef = useRef(transportFactory);
   const connectInternalRef = useRef<(parameters: JoinParameters, reconnecting: boolean) => Promise<void>>(() => Promise.resolve());
   useEffect(() => { stateRef.current = state; }, [state]);
@@ -107,6 +119,150 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       return false;
     }
   }, []);
+
+  const answerDraftScope = useCallback((current: AppState, snapshot: GameSnapshot | null = current.snapshot): AnswerDraftScope | null => {
+    const round = snapshot?.round;
+    const target = current.joinParameters;
+    if (!target || !snapshot || !round || snapshot.roomId.trim().toUpperCase() !== target.roomId.trim().toUpperCase()) return null;
+    return {
+      hostSessionId: target.hostSessionId,
+      roomId: snapshot.roomId,
+      gameId: snapshot.gameId,
+      roundNumber: round.number,
+      playerId: current.identity.playerId,
+    };
+  }, []);
+
+  const flushCurrentAnswerDraft = useCallback((): void => {
+    const current = stateRef.current;
+    const scope = answerDraftScope(current);
+    if (!scope || current.snapshot?.phase !== 'answering') return;
+    const frozen = frozenFinalizationRef.current;
+    const matchingFrozen = frozen
+      && frozen.gameId === scope.gameId
+      && frozen.roundNumber === scope.roundNumber
+      ? frozen
+      : undefined;
+    saveAnswerDraft({ scope, answers: current.answers, ...(matchingFrozen ? { frozenFinalization: matchingFrozen } : {}) });
+  }, [answerDraftScope]);
+
+  const clearAnswerDraftForState = useCallback((current: AppState): void => {
+    const scope = answerDraftScope(current);
+    if (scope) removeAnswerDraft(scope);
+    frozenFinalizationRef.current = null;
+    seenFinalizationRef.current = null;
+    legacyFallbackSentRef.current = null;
+    window.clearTimeout(answerDraftTimerRef.current);
+    answerDraftTimerRef.current = 0;
+  }, [answerDraftScope]);
+
+  const handleSnapshotAnswerLifecycle = useCallback((snapshot: GameSnapshot): Record<string, string> | null => {
+    const current = stateRef.current;
+    const previousSnapshot = current.snapshot;
+    const previousSequence = previousSnapshot?.sequenceNumber;
+    if ((previousSequence !== undefined && snapshot.sequenceNumber <= previousSequence)
+      || snapshot.sequenceNumber < current.lastSeenSequenceNumber) return null;
+
+    const playerId = current.identity.playerId;
+    if (!snapshot.players.some((player) => player.profile.id === playerId)) return null;
+    const previousScope = answerDraftScope(current, previousSnapshot);
+    const nextScope = answerDraftScope(current, snapshot);
+    const roundChanged = previousSnapshot?.gameId !== undefined
+      && (previousSnapshot.gameId !== snapshot.gameId
+        || previousSnapshot.round?.number !== snapshot.round?.number);
+    if (roundChanged && previousScope) {
+      removeAnswerDraft(previousScope);
+      frozenFinalizationRef.current = null;
+      seenFinalizationRef.current = null;
+      legacyFallbackSentRef.current = null;
+    }
+
+    const stored = nextScope ? readAnswerDraft(nextScope) : null;
+    const sameCurrentRound = previousSnapshot?.gameId === snapshot.gameId
+      && previousSnapshot.round?.number === snapshot.round?.number;
+    const restorableAnswers = snapshot.phase === 'answering'
+      && !snapshot.donePlayerIds.includes(playerId)
+      && !current.hasLocalAnswerDraft
+      ? stored?.answers ?? null
+      : null;
+
+    const finalization = snapshot.answerFinalization;
+    if (finalization && nextScope && snapshot.phase === 'answering' && snapshot.round) {
+      seenFinalizationRef.current = { gameId: snapshot.gameId, roundNumber: snapshot.round.number };
+      if (!snapshot.donePlayerIds.includes(playerId)) {
+        const inMemory = frozenFinalizationRef.current;
+        const storedFrozen = stored?.frozenFinalization;
+        const existingFrozen = inMemory
+          && inMemory.gameId === snapshot.gameId
+          && inMemory.roundNumber === snapshot.round.number
+          && inMemory.finalizationId === finalization.id
+          ? inMemory
+          : storedFrozen
+            && storedFrozen.gameId === snapshot.gameId
+            && storedFrozen.roundNumber === snapshot.round.number
+            && storedFrozen.finalizationId === finalization.id
+            ? storedFrozen
+            : null;
+        const ownSubmission = snapshot.submissions[playerId]?.answers;
+        const answers = existingFrozen?.answers
+          ?? (sameCurrentRound && current.hasLocalAnswerDraft ? current.answers : null)
+          ?? stored?.answers
+          ?? ownSubmission
+          ?? current.answers;
+        try {
+          const message = existingFrozen
+            ? createFinalizationSubmit(current.identity.profile, existingFrozen.answers, existingFrozen.roundNumber, existingFrozen.finalizationId, existingFrozen.requestId)
+            : createFinalizationSubmit(current.identity.profile, answers, snapshot.round.number, finalization.id);
+          const frozen: FrozenFinalizationResponse = existingFrozen ?? {
+            gameId: snapshot.gameId,
+            roundNumber: snapshot.round.number,
+            finalizationId: finalization.id,
+            requestId: message.requestId ?? '',
+            answers: { ...answers },
+          };
+          if (!frozen.requestId) throw new Error('Brak requestId finalizacji.');
+          frozenFinalizationRef.current = frozen;
+          saveAnswerDraft({ scope: nextScope, answers: frozen.answers, frozenFinalization: frozen });
+          send(message);
+        } catch (error) {
+          recordConnectionDiagnostic('answer-finalization.prepare.failed', 'error', getDiagnosticErrorDetails(error));
+        }
+      }
+    }
+
+    const enteringReview = snapshot.phase === 'categoryReview'
+      && previousSnapshot?.phase === 'answering'
+      && previousSnapshot.gameId === snapshot.gameId
+      && previousSnapshot.round?.number === snapshot.round?.number;
+    if (enteringReview && previousScope) {
+      const previousStored = readAnswerDraft(previousScope);
+      const finalizationWasSeen = (seenFinalizationRef.current?.gameId === snapshot.gameId
+        && seenFinalizationRef.current.roundNumber === snapshot.round?.number)
+        || previousStored?.frozenFinalization !== undefined;
+      const fallbackKey = JSON.stringify([snapshot.gameId, snapshot.round?.number, playerId]);
+      if (!finalizationWasSeen
+        && !snapshot.donePlayerIds.includes(playerId)
+        && legacyFallbackSentRef.current !== fallbackKey) {
+        legacyFallbackSentRef.current = fallbackKey;
+        const answers = current.hasLocalAnswerDraft ? current.answers : previousStored?.answers ?? current.answers;
+        try {
+          send(createSubmit(current.identity.profile, answers));
+        } catch (error) {
+          recordConnectionDiagnostic('legacy-finalization.submit.failed', 'error', getDiagnosticErrorDetails(error));
+        }
+      }
+      removeAnswerDraft(previousScope);
+      frozenFinalizationRef.current = null;
+      seenFinalizationRef.current = null;
+    } else if (snapshot.phase === 'gameFinished' && previousScope) {
+      removeAnswerDraft(previousScope);
+      frozenFinalizationRef.current = null;
+      seenFinalizationRef.current = null;
+      legacyFallbackSentRef.current = null;
+    }
+
+    return restorableAnswers;
+  }, [answerDraftScope, send]);
 
   const removeCurrentUnfinishedSession = useCallback((): void => {
     const currentState = stateRef.current;
@@ -150,6 +306,9 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
 
   const handleMessage = useCallback((message: HostMessage): void => {
     const receivedAt = Date.now();
+    const snapshot = snapshotFromHostMessage(message);
+    const restoredAnswers = snapshot ? handleSnapshotAnswerLifecycle(snapshot) : null;
+    if (message.type === 'game:reset') clearAnswerDraftForState(stateRef.current);
     if (message.type !== 'host:heartbeat') {
       recordConnectionDiagnostic('host-message.received', 'info', hostMessageDiagnosticDetails(message));
     }
@@ -180,7 +339,8 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       }
     }
     dispatch({ type: 'host-message', message, receivedAt });
-  }, [persistCurrentUnfinishedSession, removeCurrentUnfinishedSession]);
+    if (restoredAnswers) dispatch({ type: 'restore-draft', answers: restoredAnswers });
+  }, [clearAnswerDraftForState, handleSnapshotAnswerLifecycle, persistCurrentUnfinishedSession, removeCurrentUnfinishedSession]);
 
   const scheduleReconnect = useCallback((): void => {
     const current = reconnectRef.current;
@@ -434,6 +594,12 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     }
 
     clearConnectionDiagnostics();
+    const previousParameters = stateRef.current.joinParameters;
+    if (previousParameters
+      && (previousParameters.roomId !== parameters.roomId
+        || previousParameters.hostSessionId !== parameters.hostSessionId)) {
+      clearAnswerDraftForState(stateRef.current);
+    }
     const resumingStoredSession = resumeSession !== undefined;
     recordConnectionDiagnostic(
       resumingStoredSession ? 'connection.session.resume-requested' : 'connection.session.started',
@@ -481,7 +647,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     transportRef.current?.close();
     transportRef.current = null;
     return connectInternal(parameters, resumingStoredSession);
-  }, [connectInternal]);
+  }, [clearAnswerDraftForState, connectInternal]);
 
   const cancel = useCallback((): void => {
     recordConnectionDiagnostic('connection.cancelled-by-user', 'info', {
@@ -532,6 +698,27 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
   }, [connectInternal]);
 
   useEffect(() => {
+    window.clearTimeout(answerDraftTimerRef.current);
+    answerDraftTimerRef.current = 0;
+    if (state.snapshot?.phase !== 'answering' || !state.snapshot.round || !state.joinParameters) return undefined;
+    answerDraftTimerRef.current = window.setTimeout(() => {
+      answerDraftTimerRef.current = 0;
+      flushCurrentAnswerDraft();
+    }, ANSWER_DRAFT_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(answerDraftTimerRef.current);
+      answerDraftTimerRef.current = 0;
+    };
+  }, [state.answers, state.gameId, state.joinParameters, state.snapshot?.phase, state.snapshot?.round?.number, flushCurrentAnswerDraft]);
+
+  useEffect(() => {
+    if (state.snapshot?.phase !== 'answering' || state.deadlineAt === null) return undefined;
+    const delay = Math.max(0, state.deadlineAt - Date.now());
+    const timer = window.setTimeout(flushCurrentAnswerDraft, delay);
+    return () => window.clearTimeout(timer);
+  }, [state.deadlineAt, state.snapshot?.phase, state.snapshot?.round?.number, flushCurrentAnswerDraft]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
       const current = stateRef.current;
       if (current.connectionStatus !== 'connected') return;
@@ -564,18 +751,25 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     };
     const online = (): void => resume('online');
     const pageShow = (): void => resume('pageshow');
-    const visibility = (): void => { if (document.visibilityState === 'visible') resume('visibilitychange'); };
+    const pageHide = (): void => flushCurrentAnswerDraft();
+    const visibility = (): void => {
+      if (document.visibilityState === 'hidden') flushCurrentAnswerDraft();
+      else resume('visibilitychange');
+    };
     window.addEventListener('online', online);
     window.addEventListener('pageshow', pageShow);
+    window.addEventListener('pagehide', pageHide);
     document.addEventListener('visibilitychange', visibility);
     return () => {
       window.removeEventListener('online', online);
       window.removeEventListener('pageshow', pageShow);
+      window.removeEventListener('pagehide', pageHide);
       document.removeEventListener('visibilitychange', visibility);
     };
-  }, [retry]);
+  }, [flushCurrentAnswerDraft, retry]);
 
   useEffect(() => () => {
+    flushCurrentAnswerDraft();
     reconnectRef.current.manuallyClosed = true;
     window.clearTimeout(reconnectRef.current.timer);
     reconnectRef.current.timer = 0;
@@ -584,7 +778,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     const transport = transportRef.current;
     transportRef.current = null;
     transport?.close();
-  }, []);
+  }, [flushCurrentAnswerDraft]);
 
   const updateIdentityAction = useCallback((values: Pick<StoredPlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>): PlayerIdentity => {
     const identity = updatePlayerIdentity(stateRef.current.identity, values);
@@ -646,19 +840,31 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       stateRef.current = { ...current, pendingWheelSpinRequestKey: key };
       dispatch({ type: 'wheel-spin-requested', key });
     },
-    setAnswer: (categoryId, value) => dispatch({ type: 'answer', categoryId, value }),
+    setAnswer: (categoryId, value) => {
+      const current = stateRef.current;
+      if (isAnswerEditingLocked(current)) return;
+      dispatch({ type: 'answer', categoryId, value });
+    },
     submitAnswers: () => {
       const current = stateRef.current;
-      send(createSubmit(current.identity.profile, current.answers));
-      dispatch({ type: 'submitted', value: true });
+      if (isAnswerEditingLocked(current)) return;
+      try {
+        const message = createSubmit(current.identity.profile, current.answers);
+        if (!send(message)) return;
+        flushCurrentAnswerDraft();
+        dispatch({ type: 'submitted', value: true });
+      } catch (error) {
+        recordConnectionDiagnostic('answers.submit.failed', 'error', getDiagnosticErrorDetails(error));
+      }
     },
     editAnswers: () => {
       const current = stateRef.current;
-      send(createEditAnswers(current.identity.playerId));
+      if (isAnswerEditingLocked(current)) return;
+      if (!send(createEditAnswers(current.identity.playerId))) return;
       dispatch({ type: 'submitted', value: false });
     },
     clearNotice: () => dispatch({ type: 'clear-notice' }),
-  }), [cancel, connect, retry, send, updateIdentityAction]);
+  }), [cancel, connect, flushCurrentAnswerDraft, retry, send, updateIdentityAction]);
 
   return <AppContext.Provider value={{ state, actions }}>{children}</AppContext.Provider>;
 }
@@ -667,6 +873,17 @@ export function useApp(): AppContextValue {
   const context = useContext(AppContext);
   if (!context) throw new Error('useApp must be used inside AppProvider');
   return context;
+}
+
+function snapshotFromHostMessage(message: HostMessage): GameSnapshot | null {
+  if (message.type === 'game:snapshot' || message.type === 'host:migrated') return message.snapshot;
+  return null;
+}
+
+function isAnswerEditingLocked(state: AppState, now = Date.now()): boolean {
+  if (state.snapshot?.phase !== 'answering') return true;
+  if (state.snapshot.answerFinalization) return true;
+  return state.deadlineAt !== null && now >= state.deadlineAt;
 }
 
 function createConnectionAttemptId(sequence: number): string {

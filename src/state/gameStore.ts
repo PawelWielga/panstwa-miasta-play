@@ -45,6 +45,7 @@ export type AppAction =
   | { type: 'connection'; status: ConnectionStatus; error?: ConnectionFailureCode | null }
   | { type: 'host-message'; message: HostMessage; receivedAt: number }
   | { type: 'answer'; categoryId: string; value: string }
+  | { type: 'restore-draft'; answers: Record<string, string> }
   | { type: 'submitted'; value: boolean }
   | { type: 'ready'; value: boolean }
   | { type: 'wheel-spin-requested'; key: string }
@@ -70,6 +71,7 @@ export function gameReducer(state: AppState, action: AppAction): AppState {
     };
     case 'connection': return { ...state, connectionStatus: action.status, connectionError: action.error ?? null };
     case 'answer': return { ...state, answers: { ...state.answers, [action.categoryId]: action.value }, hasLocalAnswerDraft: true };
+    case 'restore-draft': return { ...state, answers: { ...action.answers }, hasLocalAnswerDraft: true };
     case 'submitted': return { ...state, answersSubmitted: action.value };
     case 'ready': return { ...state, localReady: action.value };
     case 'wheel-spin-requested': return { ...state, pendingWheelSpinRequestKey: action.key };
@@ -163,7 +165,7 @@ function applySnapshot(state: AppState, snapshot: GameSnapshot): AppState {
     roundScores: snapshot.roundScores,
     finalScores: snapshot.finalScores,
     answers: restoredAnswers,
-    answersSubmitted: playerDone,
+    answersSubmitted: playerDone || (!roundChanged && state.answersSubmitted),
     hasLocalAnswerDraft,
     pendingWheelSpinRequestKey: state.pendingWheelSpinRequestKey === waitingWheelRequestKey
       ? state.pendingWheelSpinRequestKey
