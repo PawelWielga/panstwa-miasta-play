@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_MESSAGE_BYTES, SUPPORTED_GAME_PROTOCOL_VERSION } from './constants';
+import {
+  ANSWER_MAX_LENGTH,
+  CATEGORY_ID_MAX_LENGTH,
+  MAX_COUNTRIES_CITIES_CATEGORIES,
+  MAX_MESSAGE_BYTES,
+  REQUEST_ID_MAX_LENGTH,
+  SUPPORTED_GAME_PROTOCOL_VERSION,
+} from './constants';
 import { createFinalizationSubmit, createPlayerHello, createRejoin, createStartWheelSpin, createSubmit, createWheelSpinHoldStarted } from './outgoing';
 
 const profile = { id: 'player-1', name: 'Ala', color: '#6d4aff', emoji: '🦊' };
@@ -35,13 +42,32 @@ describe('countries-cities submit bounds', () => {
     expect(createFinalizationSubmit(profile, { city: 'Augustów' }, 3, 'final-3', 'request-fixed')).toEqual(message);
   });
 
-  it('rejects oversized answer maps and keeps a 30-answer multibyte payload below 64 KiB', () => {
-    const answers = Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`category-${String(index + 1)}`, 'Ż'.repeat(60)]));
-    const message = createSubmit(profile, answers);
+  it('keeps a maximum tagged finalization submit below 64 KiB', () => {
+    const answers = Object.fromEntries(Array.from({ length: MAX_COUNTRIES_CITIES_CATEGORIES }, (_, index) => [
+      `category-${String(index + 1)}`.padEnd(CATEGORY_ID_MAX_LENGTH, 'x'),
+      'Ż'.repeat(ANSWER_MAX_LENGTH),
+    ]));
+    const message = createFinalizationSubmit(
+      profile,
+      answers,
+      99,
+      'f'.repeat(REQUEST_ID_MAX_LENGTH),
+      'r'.repeat(REQUEST_ID_MAX_LENGTH),
+    );
+
+    expect(Object.keys(message.answers)).toHaveLength(MAX_COUNTRIES_CITIES_CATEGORIES);
+    expect(Object.keys(message.answers).every((id) => id.length === CATEGORY_ID_MAX_LENGTH)).toBe(true);
     expect(new TextEncoder().encode(JSON.stringify(message)).byteLength).toBeLessThanOrEqual(MAX_MESSAGE_BYTES);
+  });
+
+  it('rejects oversized answer maps', () => {
+    const answers = Object.fromEntries(Array.from({ length: MAX_COUNTRIES_CITIES_CATEGORIES }, (_, index) => [
+      `category-${String(index + 1)}`,
+      'Ż'.repeat(ANSWER_MAX_LENGTH),
+    ]));
     expect(() => createSubmit(profile, { ...answers, extra: 'A' })).toThrow();
-    expect(() => createSubmit(profile, { ['k'.repeat(65)]: 'A' })).toThrow();
-    expect(() => createSubmit(profile, { city: 'A'.repeat(61) })).toThrow();
+    expect(() => createSubmit(profile, { ['k'.repeat(CATEGORY_ID_MAX_LENGTH + 1)]: 'A' })).toThrow();
+    expect(() => createSubmit(profile, { city: 'A'.repeat(ANSWER_MAX_LENGTH + 1) })).toThrow();
   });
 });
 
