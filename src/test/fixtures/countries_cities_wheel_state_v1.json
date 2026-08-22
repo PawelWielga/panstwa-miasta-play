@@ -1,0 +1,239 @@
+{
+  "schemaVersion": 1,
+  "contractId": "countries-cities-wheel-state-v1",
+  "states": {
+    "waiting": {
+      "schemaVersion": 1,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "letterPool": [
+        "A",
+        "B",
+        "Ł"
+      ],
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "spinSeed": 12345,
+      "finalTurns": 7
+    },
+    "spinning": {
+      "schemaVersion": 1,
+      "phase": "spinning",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "letterPool": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "R",
+        "S",
+        "T",
+        "U",
+        "W",
+        "Z"
+      ],
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "spinStartedAt": 2000,
+      "spinDurationMs": 6000,
+      "spinSeed": 12345,
+      "finalTurns": 6
+    },
+    "finished": {
+      "schemaVersion": 1,
+      "phase": "finished",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "letterPool": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "R",
+        "S",
+        "T",
+        "U",
+        "W",
+        "Z"
+      ],
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "spinStartedAt": 2000,
+      "spinDurationMs": 6000,
+      "spinSeed": 12345,
+      "finalTurns": 6,
+      "letter": "R"
+    }
+  },
+  "invalidStates": {
+    "revealedBeforeFinished": {
+      "schemaVersion": 1,
+      "phase": "spinning",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "spinStartedAt": 2000,
+      "spinDurationMs": 6000,
+      "spinSeed": 12345,
+      "finalTurns": 6,
+      "letter": "Ł"
+    },
+    "unsupportedSchema": {
+      "schemaVersion": 2,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000
+    },
+    "waitingWithSpinStartedAt": {
+      "schemaVersion": 1,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "spinStartedAt": 2000
+    },
+    "waitingWithSpinDurationMs": {
+      "schemaVersion": 1,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "spinDurationMs": 6000
+    },
+    "waitingWithNegativeSpinSeed": {
+      "schemaVersion": 1,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "spinSeed": -1
+    },
+    "waitingWithFinalTurnsBelowRange": {
+      "schemaVersion": 1,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "finalTurns": 0
+    },
+    "waitingWithFinalTurnsAboveRange": {
+      "schemaVersion": 1,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "finalTurns": 21
+    },
+    "finishedLetterOutsidePool": {
+      "schemaVersion": 1,
+      "phase": "finished",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "letterPool": [
+        "A",
+        "B"
+      ],
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "spinStartedAt": 2000,
+      "spinDurationMs": 6000,
+      "spinSeed": 12345,
+      "finalTurns": 6,
+      "letter": "Ł"
+    },
+    "emptyLetterPool": {
+      "schemaVersion": 1,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "letterPool": []
+    },
+    "duplicateLetterPool": {
+      "schemaVersion": 1,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "letterPool": [
+        "A",
+        "A"
+      ]
+    },
+    "multiLetterPoolEntry": {
+      "schemaVersion": 1,
+      "phase": "waiting",
+      "hostSessionId": "session-1",
+      "roundNumber": 2,
+      "spinId": "spin-2",
+      "selectedPlayerId": "player-1",
+      "waitingStartedAt": 1000,
+      "waitingDeadlineAt": 11000,
+      "letterPool": [
+        "AB"
+      ]
+    }
+  }
+}

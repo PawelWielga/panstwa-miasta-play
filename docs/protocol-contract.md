@@ -2,58 +2,185 @@
 
 Dokument opisuje kontrakt używany przez klienta WWW. Źródłem prawdy pozostaje implementacja hosta Android z repozytorium `PawelWielga/panstwa-miasta` oraz typy w `src/protocol/messages.ts`.
 
-## Transport
+## Wersjonowane źródło kontraktu PeerJS
 
-Klient WWW odczytuje z linku wyłącznie kod pokoju, normalizuje go i deterministycznie wylicza identyfikator hosta. Wersja protokołu pochodzi z centralnej stałej `SUPPORTED_GAME_PROTOCOL_VERSION`.
+Wartości transportu v4 używane przez runtime klienta WWW są zebrane w
+`src/peer/peerJsContract.ts`. Identyczny zestaw publicznych wektorów jest
+przechowywany w `src/test/fixtures/peerjs_contract_v4.json` oraz w repozytorium
+Android pod `test/fixtures/peerjs_contract_v4.json`.
+
+SHA-256 dokładnych bajtów bieżącego zestawu:
+
+```text
+511d759248509a097fe80f9c2d25d2bd4c1101bb3177454fedbd376d8afe1234
+```
+
+Testy Dart i TypeScript sprawdzają tę checksumę oraz wersję, label, metadata,
+canonicalizację i dowody HMAC, komunikaty bridge, politykę ICE i stabilne kody
+błędów. Nie wolno kopiować tych wartości do kolejnych modułów runtime.
+Zmiana znaczenia pola obowiązkowego, canonicalizacji, labelu lub HMAC wymaga
+nowej wersji transportu i nowego pliku wektorów. Nieznana wersja jest odrzucana
+bez cichego downgrade; nowe pola v4 mogą być dodawane tylko jako opcjonalne.
+
+## Transport PeerJS v4
+
+Ręczne dołączenie online używa wyłącznie 6-znakowego kodu pokoju, np.:
+
+```text
+ABC234
+```
+
+Kod korzysta z alfabetu `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`. Klient WWW normalizuje ręczne wejście i nie wymaga od użytkownika PIN-u, hasła, Peer ID ani pełnego `PM4-...`.
+
+Obie strony deterministycznie rozwijają 6 znaków do wewnętrznych credentials v4:
+
+```text
+PM4-{roomId}-{hostSessionId}-{secret}
+```
+
+- `roomId`: 6-znakowy kod użytkownika,
+- `hostSessionId`: 26 znaków z alfabetu `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`,
+- `secret`: 20 znaków z tego samego alfabetu,
+- dla nowych hostów `hostSessionId` i `secret` są deterministycznie wyprowadzane z `roomId`,
+- pełny `PM4-...` jest formatem transportowym i kompatybilnościowym, nie kodem do ręcznego wpisywania,
+- starsze pełne credentials pozostają parsowalne w linkach/QR, aby nie zrywać istniejących zaproszeń.
+
+Link lub QR może automatycznie przenosić pełne dane techniczne, np.:
+
+```text
+https://gra.dihor.pl/?code=PM4-ABC234-<hostSessionId>-<secret>&protocol=4
+```
+
+Nie zmienia to UX: gracz ręcznie przekazuje i wpisuje tylko `ABC234`. Klient nie wykonuje cichego downgrade'u do protokołu v3 ani do nieuwierzytelnionego transportu.
+
+Model bezpieczeństwa jest świadomie ograniczony entropią 6-znakowego kodu. Deterministyczne rozwinięcie credentials nie zwiększa jego siły, ale zachowujemy challenge-response, HMAC, jednorazowy nonce, timeouty, ochronę przed replay i brak danych gracza przed zakończeniem handshake.
+
+Peer ID hosta nie zawiera jawnego sekretu. Dla krótkiego kodu obie strony najpierw wyprowadzają identyczne wewnętrzne `PM4-...`, a następnie liczą:
+
+```text
+panstwa-miasta-room-v4-{pierwsze 32 znaki hex SHA-256(wewnętrznego pełnego kodu)}
+```
+
+Wspólny wektor regresyjny Android ↔ WWW:
+
+```text
+ABC234 -> panstwa-miasta-room-v4-d7fee74e05cf19a0c1b97b4486a7b738
+```
+
+`DataConnection` używa:
 
 ```ts
-const roomId = normalizeRoomId(rawRoomId);
-const hostPeerId = buildPeerJsHostId(roomId);
-
 peer.connect(hostPeerId, {
-  label: 'panstwa-miasta-game-v1',
+  label: 'panstwa-miasta-game-v4',
   reliable: true,
   serialization: 'json',
   metadata: {
-    room: roomId,
-    protocol: SUPPORTED_GAME_PROTOCOL_VERSION,
+    hostSessionId,
+    protocol: 4,
   },
 });
 ```
 
-Format identyfikatora hosta to `panstwa-miasta-room-v{wersja}-{kod-małymi-literami}`. Dla pokoju `ABC123` i wersji 3 otrzymujemy `panstwa-miasta-room-v3-abc123`. Parametr `peer` ze starszych linków jest ignorowany. Parametr `protocol` jest opcjonalny i służy wyłącznie do wykrywania niezgodnych starych linków.
+Metadata nie zawiera sekretu. Samo dopasowanie Peer ID i metadata nie uwierzytelnia hosta, dlatego przed wiadomościami gry wykonywany jest wzajemny handshake HMAC.
 
-Komunikaty są wysyłane jako bezpośrednie obiekty JSON. Nie stosuje się dodatkowej koperty `event/payload`.
+### Polityka ICE STUN-only
 
+Host Flutter i klient WWW przekazują PeerJS jawną, identyczną konfigurację ICE:
 
-### Handshake wersji hosta
+```ts
+{
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  sdpSemantics: 'unified-plan',
+}
+```
 
-Po otwarciu `DataConnection` host wysyła transportowy komunikat kontrolny:
+Konfiguracja nie zawiera `turn:`, `turns:`, `username` ani `credential`. Jawne przekazanie `iceServers` jest wymagane, aby nie odziedziczyć publicznych relayów z defaults biblioteki PeerJS. STUN służy wyłącznie do odkrycia kandydatów i nie pośredniczy w przesyłaniu komunikatów gry.
+
+Bez TURN połączenie nie jest gwarantowane przy CGNAT, symetrycznym NAT, VPN, restrykcyjnym firewallu, w części sieci firmowych, szkolnych, komórkowych i publicznych Wi-Fi. Błąd WebRTC jest prezentowany jako blokada bezpośredniego połączenia i nie uruchamia mniej bezpiecznego fallbacku relay.
+
+### Uwierzytelniony handshake
+
+1. Po otwarciu `DataConnection` host generuje jednorazowy 128-bitowy nonce.
+2. Host wysyła `bridge:challenge` z wersją aplikacji, `hostSessionId`, nonce, Peer ID i `hostProof`.
+3. Klient sprawdza wersję, sesję, Peer ID i HMAC hosta.
+4. Klient odsyła `bridge:authenticate` z `clientProof`.
+5. Host sprawdza HMAC klienta. Dopiero wtedy otwiera lokalny WebSocket do silnika gry.
+6. Po otwarciu lokalnego mostu host wysyła `bridge:ready`.
+7. Dopiero po `bridge:ready` transport WWW przechodzi do stanu `open` i `AppContext` może wysłać `player:hello` oraz ewentualny `client:rejoin`.
+
+`bridge:challenge`:
+
+```ts
+{
+  type: 'bridge:challenge';
+  appVersion: string;
+  buildNumber: number;
+  protocolVersion: 4;
+  hostSessionId: string;
+  nonce: string;
+  peerId: string;
+  hostProof: string;
+}
+```
+
+`bridge:authenticate`:
+
+```ts
+{
+  type: 'bridge:authenticate';
+  protocolVersion: 4;
+  hostSessionId: string;
+  nonce: string;
+  clientProof: string;
+}
+```
+
+`bridge:ready`:
 
 ```ts
 {
   type: 'bridge:ready';
   appVersion: string;
   buildNumber: number;
-  protocolVersion: number;
+  protocolVersion: 4;
+  hostSessionId: string;
 }
 ```
 
-`buildNumber` jest Androidowym `versionCode` i służy do porównywania wydań. `appVersion` jest wyłącznie informacją diagnostyczną. Komunikat jest walidowany przed wysłaniem `player:hello` i nie trafia do parsera wiadomości gry.
+HMAC-SHA-256 używa pełnego znormalizowanego wewnętrznego kodu v4 jako klucza. Dla ręcznego 6-znakowego kodu klient sam deterministycznie wyprowadza ten klucz; użytkownik go nie zna i nie wpisuje. Podpisywana wartość składa się z pól rozdzielonych pojedynczym znakiem LF:
 
-Klient WWW obsługuje tylko najnowszą świadomie wspieraną wersję hosta. Aktualne wymagania są ustawiane ręcznie w `src/config/hostCompatibility.ts`:
-
-```ts
-export const MIN_SUPPORTED_HOST_BUILD_NUMBER = 10;
-export const REQUIRED_HOST_PROTOCOL_VERSION = 3;
+```text
+panstwa-miasta-peerjs-v4
+{host|client}
+{nonce lowercase}
+{hostSessionId}
+{peerId}
+4
 ```
 
-Brak `bridge:ready`, brak któregokolwiek pola wersji, zbyt niski `buildNumber` lub inna wersja protokołu powoduje błąd `host-version-unsupported`. `DataConnection` jest zamykane, klient nie wysyła `player:hello` ani `client:rejoin` i nie uruchamia automatycznego reconnectu. Zmiana wymaganej wersji hosta musi być wdrożona razem z testami i aktualizacją dokumentacji. Klient nie pobiera wersji z Google Play ani z zewnętrznego backendu.
+Host i klient korzystają ze wspólnych wektorów SHA-256/HMAC w testach Dart i TypeScript. Dowody są porównywane w stałym czasie. Powtórzony challenge, druga odpowiedź uwierzytelniająca, wiadomość gry przed handshake, niezgodna sesja, zły HMAC lub timeout zamykają połączenie bez uruchamiania lokalnego mostu.
+
+### Zgodność wersji hosta
+
+Minimalny build hosta jest ustawiany w `src/config/hostCompatibility.ts`. Wymagana wersja transportu PeerJS pochodzi z `PEER_JS_ONLINE_PROTOCOL_VERSION` i wynosi 4. `appVersion` służy diagnostyce, a `buildNumber` jest Androidowym `versionCode`.
+
+Błąd wersji lub uwierzytelnienia zamyka połączenie przed wysłaniem danych gracza i wyłącza automatyczny reconnect dla tej próby. Użytkownik otrzymuje prosty komunikat o potrzebie nowego kodu albo aktualizacji. Klient nie pobiera wersji z Google Play ani z zewnętrznego backendu.
+
+### Kolejność wdrożenia
+
+Zmiany kontraktu muszą być wdrażane skoordynowanie:
+
+1. klient WWW rozumie bieżący v4 i 6-znakowy kod użytkownika,
+2. host Android publikuje ten sam kontrakt v4 i wyprowadza z kodu identyczne credentials.
+
+Pełny `PM4-...` pozostaje parsowalny dla zgodności starszych linków i QR. Nie oznacza to przywrócenia go jako ręcznego kodu. LAN/hotspot Android pozostaje niezależny od tej zmiany.
 
 ## Ograniczenia i identyfikatory
 
 - maksymalny rozmiar wiadomości: 64 KiB po serializacji UTF-8,
 - maksymalna długość odpowiedzi: 60 znaków,
+- nazwa kategorii: maksymalnie 64 znaki,
+- identyfikator kategorii: maksymalnie 64 znaki,
 - kod pokoju: 6 znaków z alfabetu `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`,
 - nazwa gracza: maksymalnie 24 znaki,
 - heartbeat klienta: co 2 sekundy,
@@ -379,3 +506,12 @@ Klient potrafi zwalidować wiadomość hosta, ale sam nie wysyła głosów.
 - rozmiar jest sprawdzany przed parsowaniem i przed wysłaniem,
 - tekst jest renderowany przez React bez wstrzykiwania HTML,
 - host Android jest jedynym źródłem wyników i faz gry.
+
+## Koło fortuny: przytrzymanie przy granicy timeoutu
+
+Klient WWW opcjonalnie wysyła `player:wheelSpinHoldStarted` w chwili rozpoczęcia przytrzymania przycisku. Wiadomość zawiera `hostSessionId`, `roundNumber`, `spinId` oraz losowy `holdId`. Późniejszy `player:startWheelSpin` przekazuje ten sam opcjonalny `holdId` razem z `holdDurationMs`.
+
+Android pozostaje źródłem prawdy. Host ocenia, czy przytrzymanie rozpoczęło się przed `waitingDeadlineAt`, na podstawie własnego czasu odbioru wiadomości i nie ufa `sentAt` klienta. Pasujące puszczenie może zostać zaakceptowane po podstawowym 10-sekundowym terminie tylko w ograniczonym oknie odpowiadającym maksymalnemu 2-sekundowemu przytrzymaniu oraz 1 sekundzie zapasu sieciowego. Jeśli gest zostanie porzucony, host uruchomi automatyczny fallback po tym ograniczonym oknie.
+
+Zmiana jest kompatybilna wstecznie: starszy host ignoruje nieznany `player:wheelSpinHoldStarted`, a dodatkowe pole `holdId` w `player:startWheelSpin` jest opcjonalne. Zwolnienie przycisku przed deadlinem zachowuje dotychczasowe działanie także ze starszym hostem.
+

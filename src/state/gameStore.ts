@@ -1,8 +1,11 @@
 import type { JoinParameters } from '../features/connection/joinParams';
+import { isTerminalJoinError } from '../protocol/gameErrors';
+import { connectionFailureCodeForGameError, type ConnectionFailureCode } from '../protocol/connectionFailure';
 import type {
   CountriesCitiesAnswerResult, CountriesCitiesSettings, CountriesCitiesSubmission,
   GameCategory, GameSnapshot, HostMessage, PlayerProfile,
 } from '../protocol/messages';
+import { wheelSpinRequestKey } from '../protocol/wheel';
 import type { PlayerIdentity } from '../storage/playerIdentityStorage';
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'lost' | 'error' | 'closed';
@@ -11,7 +14,7 @@ export interface AppState {
   identity: PlayerIdentity;
   joinParameters: JoinParameters | null;
   connectionStatus: ConnectionStatus;
-  connectionError: string | null;
+  connectionError: ConnectionFailureCode | null;
   players: PlayerProfile[];
   snapshot: GameSnapshot | null;
   categories: GameCategory[];
@@ -26,7 +29,9 @@ export interface AppState {
   finalScores: Record<string, number>;
   answers: Record<string, string>;
   answersSubmitted: boolean;
+  hasLocalAnswerDraft: boolean;
   localReady: boolean;
+  pendingWheelSpinRequestKey: string | null;
   lastHostActivityAt: number;
   lastSeenSequenceNumber: number;
   gameId: string | null;
@@ -36,11 +41,14 @@ export interface AppState {
 export type AppAction =
   | { type: 'identity'; identity: PlayerIdentity }
   | { type: 'join-parameters'; parameters: JoinParameters }
-  | { type: 'connection'; status: ConnectionStatus; error?: string | null }
+  | { type: 'resume-session'; identity: PlayerIdentity; parameters: JoinParameters; lastSeenSequenceNumber: number }
+  | { type: 'connection'; status: ConnectionStatus; error?: ConnectionFailureCode | null }
   | { type: 'host-message'; message: HostMessage; receivedAt: number }
   | { type: 'answer'; categoryId: string; value: string }
+  | { type: 'restore-draft'; answers: Record<string, string> }
   | { type: 'submitted'; value: boolean }
   | { type: 'ready'; value: boolean }
+  | { type: 'wheel-spin-requested'; key: string }
   | { type: 'clear-notice' };
 
 export function createInitialState(identity: PlayerIdentity, joinParameters: JoinParameters | null): AppState {
@@ -48,8 +56,8 @@ export function createInitialState(identity: PlayerIdentity, joinParameters: Joi
     identity, joinParameters, connectionStatus: 'idle', connectionError: null, players: [], snapshot: null,
     categories: [], settings: null, hostControlsReview: true, currentLetter: null, deadlineAt: null,
     reviewSubmissions: [], reviewCategoryIndex: 0, revealResults: {}, roundScores: {}, finalScores: {},
-    answers: {}, answersSubmitted: false, localReady: false, lastHostActivityAt: 0, lastSeenSequenceNumber: 0,
-    gameId: null, notice: null,
+    answers: {}, answersSubmitted: false, hasLocalAnswerDraft: false, localReady: false, pendingWheelSpinRequestKey: null,
+    lastHostActivityAt: 0, lastSeenSequenceNumber: 0, gameId: null, notice: null,
   };
 }
 
@@ -57,10 +65,16 @@ export function gameReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'identity': return { ...state, identity: action.identity };
     case 'join-parameters': return { ...state, joinParameters: action.parameters };
+    case 'resume-session': return {
+      ...createInitialState(action.identity, action.parameters),
+      lastSeenSequenceNumber: action.lastSeenSequenceNumber,
+    };
     case 'connection': return { ...state, connectionStatus: action.status, connectionError: action.error ?? null };
-    case 'answer': return { ...state, answers: { ...state.answers, [action.categoryId]: action.value } };
+    case 'answer': return { ...state, answers: { ...state.answers, [action.categoryId]: action.value }, hasLocalAnswerDraft: true };
+    case 'restore-draft': return { ...state, answers: { ...action.answers }, hasLocalAnswerDraft: true };
     case 'submitted': return { ...state, answersSubmitted: action.value };
     case 'ready': return { ...state, localReady: action.value };
+    case 'wheel-spin-requested': return { ...state, pendingWheelSpinRequestKey: action.key };
     case 'clear-notice': return { ...state, notice: null };
     case 'host-message': return reduceHostMessage(state, action.message, action.receivedAt);
   }
@@ -70,16 +84,29 @@ function reduceHostMessage(state: AppState, message: HostMessage, receivedAt: nu
   const active = { ...state, lastHostActivityAt: receivedAt };
   switch (message.type) {
     case 'room:players': return { ...active, players: message.players };
-    case 'game:error': return { ...active, connectionError: message.message, notice: message.message };
+    case 'game:error': return isTerminalJoinError(message)
+      ? { ...active, connectionStatus: 'error', connectionError: connectionFailureCodeForGameError(message.code), notice: null }
+      : { ...active, notice: message.message };
     case 'host:heartbeat': return { ...active, gameId: message.gameId, lastSeenSequenceNumber: Math.max(state.lastSeenSequenceNumber, message.sequenceNumber) };
-    case 'game:snapshot': return applySnapshot(active, message.snapshot);
-    case 'host:migrated': return { ...applySnapshot(active, message.snapshot), notice: 'Host gry został zmieniony.' };
+    case 'game:snapshot': return isStaleSnapshot(state, message.snapshot)
+      ? active
+      : applySnapshot(active, message.snapshot);
+    case 'game:snapshot-chunk': return active;
+    case 'host:migrated': {
+      if (message.sequenceNumber < state.lastSeenSequenceNumber || isStaleSnapshot(state, message.snapshot)) return active;
+      const migrated = applySnapshot(active, message.snapshot);
+      return {
+        ...migrated,
+        lastSeenSequenceNumber: Math.max(migrated.lastSeenSequenceNumber, message.sequenceNumber),
+        notice: 'Host gry został zmieniony.',
+      };
+    }
     case 'host:lost': return { ...active, notice: 'Połączenie z hostem zostało utracone.' };
     case 'host:migration-started': return { ...active, notice: 'Trwa próba zmiany hosta gry.' };
-    case 'game:reset': return { ...active, snapshot: null, currentLetter: null, deadlineAt: null, answers: {}, answersSubmitted: false, localReady: false, revealResults: {}, roundScores: {}, finalScores: {}, notice: 'Host przygotowuje nową grę.' };
+    case 'game:reset': return { ...active, snapshot: null, currentLetter: null, deadlineAt: null, answers: {}, answersSubmitted: false, hasLocalAnswerDraft: false, localReady: false, pendingWheelSpinRequestKey: null, revealResults: {}, roundScores: {}, finalScores: {}, notice: 'Host przygotowuje nową grę.' };
     case 'game:start': return { ...active, localReady: false, notice: null };
     case 'countries-cities:settings': return { ...active, categories: message.categories, settings: message.settings, hostControlsReview: message.hostControlsReview };
-    case 'countries-cities:start-round': return { ...active, currentLetter: message.letter, answers: {}, answersSubmitted: false, revealResults: {}, roundScores: {}, notice: null };
+    case 'countries-cities:start-round': return { ...active, currentLetter: message.letter, answers: {}, answersSubmitted: false, hasLocalAnswerDraft: false, revealResults: {}, roundScores: {}, notice: null };
     case 'countries-cities:deadline': return { ...active, deadlineAt: message.deadlineAt };
     case 'countries-cities:review': return { ...active, reviewSubmissions: message.submissions, reviewCategoryIndex: message.categoryIndex };
     case 'countries-cities:vote': return active;
@@ -89,13 +116,40 @@ function reduceHostMessage(state: AppState, message: HostMessage, receivedAt: nu
   }
 }
 
+function isStaleSnapshot(state: AppState, snapshot: GameSnapshot): boolean {
+  const lastAppliedSnapshotSequenceNumber = state.snapshot?.sequenceNumber;
+  if (
+    lastAppliedSnapshotSequenceNumber !== undefined &&
+    snapshot.sequenceNumber <= lastAppliedSnapshotSequenceNumber
+  ) {
+    return true;
+  }
+  return snapshot.sequenceNumber < state.lastSeenSequenceNumber;
+}
+
 function applySnapshot(state: AppState, snapshot: GameSnapshot): AppState {
   const previousRound = state.snapshot?.round?.number;
   const nextRound = snapshot.round?.number;
   const roundChanged = previousRound !== undefined && nextRound !== previousRound;
-  const ownSubmission = snapshot.submissions[state.identity.playerId];
+  const playerId = state.identity.playerId;
+  const ownSubmission = snapshot.submissions[playerId];
+  const playerDone = snapshot.donePlayerIds.includes(playerId);
   const categories = snapshot.round?.categories ?? snapshot.categories;
-  const restoredAnswers = ownSubmission?.answers ?? state.answers;
+  let restoredAnswers = state.answers;
+  let hasLocalAnswerDraft = state.hasLocalAnswerDraft;
+  if (roundChanged) {
+    restoredAnswers = ownSubmission?.answers ?? {};
+    hasLocalAnswerDraft = !playerDone && ownSubmission !== undefined;
+  } else if (playerDone) {
+    restoredAnswers = ownSubmission?.answers ?? state.answers;
+    hasLocalAnswerDraft = false;
+  } else if (!state.hasLocalAnswerDraft && ownSubmission) {
+    restoredAnswers = ownSubmission.answers;
+    hasLocalAnswerDraft = true;
+  }
+  const waitingWheelRequestKey = snapshot.wheelState?.phase === 'waiting'
+    ? wheelSpinRequestKey(snapshot.wheelState)
+    : null;
   return {
     ...state,
     snapshot,
@@ -110,8 +164,12 @@ function applySnapshot(state: AppState, snapshot: GameSnapshot): AppState {
     revealResults: snapshot.finalResults,
     roundScores: snapshot.roundScores,
     finalScores: snapshot.finalScores,
-    answers: roundChanged ? (ownSubmission?.answers ?? {}) : restoredAnswers,
-    answersSubmitted: snapshot.donePlayerIds.includes(state.identity.playerId) || ownSubmission !== undefined,
+    answers: restoredAnswers,
+    answersSubmitted: playerDone || (!roundChanged && state.answersSubmitted),
+    hasLocalAnswerDraft,
+    pendingWheelSpinRequestKey: state.pendingWheelSpinRequestKey === waitingWheelRequestKey
+      ? state.pendingWheelSpinRequestKey
+      : null,
     lastSeenSequenceNumber: Math.max(state.lastSeenSequenceNumber, snapshot.sequenceNumber),
     gameId: snapshot.gameId,
   };

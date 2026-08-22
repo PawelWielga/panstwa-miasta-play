@@ -45,10 +45,40 @@ export interface CountriesCitiesRound {
   categoryIndex: number;
 }
 
+export type CountriesCitiesWheelPhase = 'waiting' | 'spinning' | 'finished';
+
+export interface CountriesCitiesWheelState {
+  schemaVersion: 1;
+  phase: CountriesCitiesWheelPhase;
+  hostSessionId: string;
+  roundNumber: number;
+  spinId: string;
+  selectedPlayerId: string;
+  letterPool?: string[];
+  waitingStartedAt: number;
+  waitingDeadlineAt: number;
+  spinStartedAt?: number;
+  spinDurationMs?: number;
+  spinSeed?: number;
+  finalTurns?: number;
+  letter?: string;
+}
+
 export interface CountriesCitiesSubmission {
   playerId: string;
   playerName: string;
   answers: Record<string, string>;
+}
+
+export type AnswerFinalizationTrigger = 'deadline' | 'manual' | 'all-submitted';
+
+export interface CountriesCitiesAnswerFinalization {
+  id: string;
+  roundNumber: number;
+  requestedAt: number;
+  expiresAt: number;
+  trigger: AnswerFinalizationTrigger;
+  expectedPlayerIds: string[];
 }
 
 export interface CountriesCitiesAnswerResult {
@@ -77,6 +107,8 @@ export interface GameSnapshot {
   usedLetters: string[];
   letterHistory: string[];
   round: CountriesCitiesRound | null;
+  wheelState?: CountriesCitiesWheelState;
+  answerFinalization?: CountriesCitiesAnswerFinalization;
   endMode: string;
   timeMode: string;
   settings: CountriesCitiesSettings;
@@ -120,6 +152,9 @@ export interface HostMigratedMessage extends MessageMetadata {
   type: 'host:migrated'; gameId: string; newHostPlayerId: string; newHostIp: string; newHostPort: number; sequenceNumber: number; snapshot: GameSnapshot;
 }
 export interface GameSnapshotMessage extends MessageMetadata { type: 'game:snapshot'; snapshot: GameSnapshot }
+export interface GameSnapshotChunkHostMessage extends MessageMetadata {
+  type: 'game:snapshot-chunk'; gameId: string; sequenceNumber: number; chunkIndex: number; chunkCount: number; payload: string;
+}
 export interface CountriesCitiesSettingsMessage extends MessageMetadata {
   type: 'countries-cities:settings'; categories: GameCategory[]; endMode: string; timeMode: string; settings: CountriesCitiesSettings; hostControlsReview: boolean;
 }
@@ -142,7 +177,7 @@ export interface CountriesCitiesResultsMessage extends MessageMetadata {
 export type HostMessage =
   | RoomPlayersMessage | GameResetMessage | GameStartMessage | GameErrorMessage
   | HostHeartbeatMessage | HostLostMessage | HostMigrationStartedMessage | HostMigratedMessage
-  | GameSnapshotMessage | CountriesCitiesSettingsMessage | CountriesCitiesStartRoundMessage
+  | GameSnapshotMessage | GameSnapshotChunkHostMessage | CountriesCitiesSettingsMessage | CountriesCitiesStartRoundMessage
   | CountriesCitiesDeadlineMessage | CountriesCitiesReviewMessage | CountriesCitiesVoteMessage
   | CountriesCitiesReviewReadyMessage | CountriesCitiesRevealMessage | CountriesCitiesResultsMessage;
 
@@ -157,9 +192,29 @@ export interface ClientRejoinMessage extends MessageMetadata {
   type: 'client:rejoin'; protocolVersion: number; player: PlayerProfile; lastSeenSequenceNumber: number;
 }
 export interface CountriesCitiesSubmitMessage extends MessageMetadata {
-  type: 'countries-cities:submit'; player: PlayerProfile; answers: Record<string, string>;
+  type: 'countries-cities:submit'; player: PlayerProfile; answers: Record<string, string>; roundNumber?: number; finalizationId?: string;
 }
-export interface CountriesCitiesEditAnswersMessage extends MessageMetadata {
-  type: 'countries-cities:edit-answers'; playerId: string;
+export interface CountriesCitiesEditAnswersMessage extends MessageMetadata { type: 'countries-cities:edit-answers'; playerId: string }
+export interface CountriesCitiesWheelSpinHoldStartedMessage extends MessageMetadata {
+  type: 'player:wheelSpinHoldStarted';
+  hostSessionId: string;
+  roundNumber: number;
+  spinId: string;
+  holdId: string;
 }
-export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage;
+export interface CountriesCitiesWheelSpinHoldCancelledMessage extends MessageMetadata {
+  type: 'player:wheelSpinHoldCancelled';
+  hostSessionId: string;
+  roundNumber: number;
+  spinId: string;
+  holdId: string;
+}
+export interface CountriesCitiesStartWheelSpinMessage extends MessageMetadata {
+  type: 'player:startWheelSpin';
+  hostSessionId: string;
+  roundNumber: number;
+  spinId: string;
+  holdDurationMs?: number;
+  holdId?: string;
+}
+export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage | CountriesCitiesWheelSpinHoldStartedMessage | CountriesCitiesWheelSpinHoldCancelledMessage | CountriesCitiesStartWheelSpinMessage;

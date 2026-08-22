@@ -12,16 +12,16 @@ przeglądarka (React + PeerJS)
 telefon Android (host i źródło prawdy)
 ```
 
-Publiczny PeerJS Cloud służy wyłącznie do rejestracji identyfikatorów i sygnalizacji potrzebnej do zestawienia WebRTC. Po otwarciu DataChannel komunikaty gry są przesyłane bezpośrednio między urządzeniami. Repozytorium nie zawiera backendu, PeerServera, relaya WebSocket, bazy danych, Workera Cloudflare ani własnego TURN.
+Publiczny PeerJS Cloud służy wyłącznie do rejestracji identyfikatorów i sygnalizacji potrzebnej do zestawienia WebRTC. Po otwarciu DataChannel komunikaty gry są przesyłane bezpośrednio między urządzeniami. Klient przekazuje PeerJS jawną konfigurację STUN-only i nie używa publicznego ani własnego TURN, relaya WebSocket, backendu, bazy danych ani Workera Cloudflare.
 
 Host Android pozostaje autorytatywny dla faz gry, czasu, odpowiedzi, ocen i punktów. Klient WWW odtwarza ekran z `game:snapshot` i nie oblicza samodzielnie wyników.
 
 ## Wymagania
 
-- Node.js 22 lub nowszy
-- npm
-- nowoczesna przeglądarka z WebRTC, Web Crypto i `localStorage`
-- HTTPS w środowisku produkcyjnym
+- Node.js 22 lub nowszy,
+- npm,
+- nowoczesna przeglądarka z WebRTC, Web Crypto i `localStorage`,
+- HTTPS w środowisku produkcyjnym.
 
 ## Uruchomienie lokalne
 
@@ -43,58 +43,65 @@ npm run build
 
 Testy PeerJS korzystają z interfejsu transportu i mocków. Nie łączą się z publicznym PeerJS Cloud.
 
-## Link zaproszenia
+## Dołączanie online
 
-Aplikacja Android generuje link zawierający wyłącznie kod pokoju:
+Ręczne dołączenie używa wyłącznie **6-znakowego kodu**, np.:
 
 ```text
-https://gra.dihor.pl/?room=ABC123
+ABC234
 ```
 
-Gracz podaje tylko swój nick i kod pokoju. Wersja protokołu jest ustawiona wewnętrznie w kodzie klienta, a identyfikator PeerJS hosta jest automatycznie wyliczany. Parametry techniczne nie są wymagane i nie są pokazywane w formularzu.
+Kod korzysta z alfabetu `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`. Formularz normalizuje wielkość liter i usuwa separatory. Użytkownik nie wpisuje Peer ID, wersji protokołu, dodatkowego PIN-u ani pełnego kodu `PM4-...`.
 
-Starszy parametr `peer` jest ignorowany. Starszy parametr `protocol` jest opcjonalny i służy wyłącznie do wykrycia niezgodnego linku.
+Link lub QR używa parametru `code`. Może przenosić krótki kod albo pełne wewnętrzne credentials v4 dla zgodności ze starszymi zaproszeniami, np.:
 
-## Kontrakt PeerJS
-
-Klient tworzy tymczasowy `Peer` bez własnego identyfikatora i otwiera `DataConnection` do hosta wyliczonego z kodu pokoju:
-
-```ts
-const roomId = normalizeRoomId(rawRoomId);
-const hostPeerId = buildPeerJsHostId(roomId);
-
-peer.connect(hostPeerId, {
-  label: 'panstwa-miasta-game-v1',
-  reliable: true,
-  serialization: 'json',
-  metadata: {
-    room: roomId,
-    protocol: SUPPORTED_GAME_PROTOCOL_VERSION,
-  },
-});
+```text
+https://gra.dihor.pl/?code=ABC234
 ```
 
-Dla pokoju `ABC123` techniczny identyfikator hosta ma postać `panstwa-miasta-room-v3-abc123`. Jest to szczegół developerski i nie jest wyświetlany graczowi.
+lub kompatybilnościowo:
 
-Po otwarciu `DataConnection` klient czeka najpierw na transportowy komunikat `bridge:ready` z `appVersion`, liczbowym `buildNumber` i `protocolVersion`. Dopiero po zaakceptowaniu wersji hosta transport przechodzi do stanu `open` i wysyłany jest bezpośrednio obiekt `player:hello`. `bridge:ready` nie trafia do parsera wiadomości gry. Nie ma dodatkowej koperty `event/payload`. `reconnectToken` znajduje się tylko w hello i pamięci lokalnej. Nie jest częścią publicznego obiektu gracza.
+```text
+https://gra.dihor.pl/?code=PM4-ABC234-<hostSessionId>-<secret>&protocol=4
+```
 
-Każda mutacja otrzymuje nowy `requestId`. Przed wysłaniem aplikacja liczy rozmiar UTF-8 zserializowanej wiadomości i odrzuca obiekty większe niż 64 KiB.
+Pełny `PM4-...` pozostaje formatem technicznym i kompatybilnościowym. Nie jest ręcznym fallbackiem dla użytkownika. Starszy parametr `room` jest odrzucany czytelnym komunikatem zamiast uruchamiać przewidywalny transport v3.
 
+## Uwierzytelniony kontrakt PeerJS v4
+
+Dla 6-znakowego kodu obie strony deterministycznie wyprowadzają identyczne wewnętrzne credentials v4. Następnie Peer ID hosta jest liczony z SHA-256 pełnego wewnętrznego kodu:
+
+```text
+panstwa-miasta-room-v4-{pierwsze 32 znaki hex SHA-256(wewnętrznego pełnego kodu)}
+```
+
+Wspólny wektor regresyjny Android ↔ WWW:
+
+```text
+ABC234 -> panstwa-miasta-room-v4-d7fee74e05cf19a0c1b97b4486a7b738
+```
+
+`DataConnection` używa etykiety `panstwa-miasta-game-v4` oraz metadata zawierającej `hostSessionId` i wersję kontraktu.
+
+Po otwarciu kanału host i klient wykonują wzajemny handshake HMAC-SHA-256:
+
+1. host wysyła jednorazowy `bridge:challenge`,
+2. klient weryfikuje hosta i odsyła `bridge:authenticate`,
+3. host weryfikuje klienta i dopiero wtedy otwiera most do silnika gry,
+4. host wysyła `bridge:ready`,
+5. dopiero wtedy klient wysyła `player:hello` i ewentualny `client:rejoin`.
+
+Profil, `playerId` i `reconnectToken` nie są wysyłane przed potwierdzeniem hosta. Powtórzone lub spóźnione komunikaty handshake, zły HMAC, niezgodna sesja i timeout kończą próbę. Sekrety, nonce i pełne dowody są wykluczone z diagnostyki.
+
+Model bezpieczeństwa jest świadomie ograniczony entropią 6-znakowego kodu. Deterministyczne wyprowadzenie credentials nie zwiększa siły sekretu: osoba, która poprawnie odgadnie kod, może próbować dołączyć. Warstwa v4 nadal chroni kolejność handshake, integralność, replay i przedwczesne ujawnienie danych gracza.
+
+Pełny kontrakt, canonicalizację HMAC, limity i wspólne wektory testowe opisuje `docs/protocol-contract.md`.
 
 ## Zgodność wersji hosta
 
-Klient WWW obsługuje wyłącznie najnowszą świadomie wspieraną wersję aplikacji Android. Zgodność wsteczna ze starszym hostem nie jest gwarantowana. Host bez pełnych informacji o wersji, ze zbyt niskim `buildNumber` albo z inną wersją protokołu jest odrzucany przed `player:hello` i `client:rejoin`.
+Klient WWW wspiera kontrakt PeerJS v4 i minimalny build ustawiony w `src/config/hostCompatibility.ts`. Nie ma cichego downgrade'u do v3 ani nieuwierzytelnionego transportu.
 
-Minimalny wspierany build i wymagana wersja protokołu są utrzymywane ręcznie w `src/config/hostCompatibility.ts`:
-
-```ts
-export const MIN_SUPPORTED_HOST_BUILD_NUMBER = 10;
-export const REQUIRED_HOST_PROTOCOL_VERSION = 3;
-```
-
-`buildNumber` odpowiada Androidowemu `versionCode`; tekstowe `appVersion` służy tylko diagnostyce. Zmiana minimum wymaga jednoczesnej aktualizacji testów i dokumentacji. Klient nie odpytuje Google Play ani zewnętrznego API.
-
-Przy błędzie `host-version-unsupported` połączenie jest zamykane, automatyczny reconnect nie jest uruchamiany, a użytkownik widzi komunikat wymagający aktualizacji aplikacji prowadzącego.
+Krótki kod oraz zgodne pełne credentials `PM4-...` prowadzą do tego samego kontraktu v4. LAN/hotspot aplikacji Android pozostaje niezależnym transportem.
 
 ## Reconnect i Safari
 
@@ -127,7 +134,7 @@ Klient obsługuje:
 11. reset do kolejnej gry,
 12. odtworzenie właściwego ekranu z `game:snapshot` po reconnect.
 
-W aktualnym protokole MVP wyłącznie host Android może oceniać odpowiedzi oraz kończyć etap oceny. Klient WWW nie wysyła `countries-cities:vote` ani nie udaje głosowania graczy.
+W aktualnym protokole wyłącznie host Android może oceniać odpowiedzi oraz kończyć etap oceny. Klient WWW nie wysyła `countries-cities:vote` ani nie duplikuje silnika gry.
 
 ## GitHub Pages
 
@@ -154,7 +161,7 @@ Dla `https://USERNAME.github.io/REPOSITORY/`:
 VITE_BASE_PATH=/REPOSITORY/ npm run build
 ```
 
-Bez dodatkowej konfiguracji workflow automatycznie używa `/<nazwa-repozytorium>/`, dlatego projekt działa pod standardowym adresem GitHub Pages. Po ustawieniu własnej domeny należy dodać w **Settings → Secrets and variables → Actions → Variables** zmienną `VITE_BASE_PATH` o wartości `/`.
+Bez dodatkowej konfiguracji workflow automatycznie używa `/<nazwa-repozytorium>/`. Po ustawieniu własnej domeny należy dodać w **Settings → Secrets and variables → Actions → Variables** zmienną `VITE_BASE_PATH` o wartości `/`.
 
 ## Własna domena i Cloudflare
 
@@ -163,7 +170,7 @@ Bez dodatkowej konfiguracji workflow automatycznie używa `/<nazwa-repozytorium>
 3. W Cloudflare dodaj rekord `CNAME` dla wybranej subdomeny wskazujący na `USERNAME.github.io`.
 4. W GitHub włącz **Enforce HTTPS**, gdy certyfikat będzie gotowy.
 5. W Cloudflare ustaw SSL/TLS na **Full** lub **Full (strict)**, gdy origin i konfiguracja domeny na to pozwalają.
-6. Plik `public/CNAME.example` jest wyłącznie wzorem na przyszłość; nie jest używany przy obecnej publikacji pod `github.io`.
+6. Plik `public/CNAME.example` jest wyłącznie wzorem na przyszłość.
 
 Cloudflare pełni tu wyłącznie rolę DNS/proxy/HTTPS. Nie przechowuje stanu gry i nie uruchamia logiki multiplayer.
 
@@ -180,16 +187,15 @@ Następnie:
 
 1. uruchom aplikację Android,
 2. utwórz pokój online,
-3. otwórz panel QR,
-4. zeskanuj link drugim urządzeniem,
-5. wpisz nazwę i dołącz,
-6. ustaw gotowość,
-7. rozpocznij rundę na hoście,
-8. wpisz i wyślij odpowiedzi w przeglądarce,
-9. przejdź ocenianie i wyniki,
-10. na chwilę wyłącz internet albo uśpij Safari,
-11. przywróć sieć i sprawdź reconnect oraz odtworzenie ekranu ze snapshotu.
+3. odczytaj 6-znakowy kod albo zeskanuj QR drugim urządzeniem,
+4. wpisz nazwę i dołącz,
+5. ustaw gotowość,
+6. rozpocznij rundę na hoście,
+7. wpisz i wyślij odpowiedzi w przeglądarce,
+8. przejdź ocenianie i wyniki,
+9. na chwilę wyłącz internet albo uśpij Safari,
+10. przywróć sieć i sprawdź reconnect oraz odtworzenie ekranu ze snapshotu.
 
 ## Ograniczenia P2P
 
-Projekt nie utrzymuje własnego TURN. Publiczny PeerJS Cloud realizuje sygnalizację, ale nie gwarantuje przejścia przez każdy NAT lub firewall. VPN, sieci firmowe, część sieci komórkowych i restrykcyjne routery mogą blokować bezpośredni WebRTC DataChannel. W takim przypadku warto zmienić sieć Wi-Fi lub wyłączyć VPN. Nie można zagwarantować działania w każdej sieci bez infrastruktury TURN.
+Projekt używa jawnej polityki ICE STUN-only i nie konfiguruje żadnego publicznego ani własnego TURN. Publiczny PeerJS Cloud realizuje wyłącznie sygnalizację. CGNAT, symetryczny NAT, VPN, sieci firmowe, szkolne, część sieci komórkowych, publiczne Wi-Fi i restrykcyjne routery mogą blokować bezpośredni WebRTC DataChannel. W takim przypadku klient pokazuje komunikat o blokadzie połączenia bezpośredniego; należy zmienić sieć lub wyłączyć VPN. Nie można zagwarantować działania online w każdej sieci bez kontrolowanej infrastruktury TURN.

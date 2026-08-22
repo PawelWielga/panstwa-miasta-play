@@ -16,26 +16,44 @@ import {
   recordConnectionDiagnostic,
   type ConnectionDiagnosticDetails,
 } from '../diagnostics/connectionDiagnostics';
-import {
-  HOST_VERSION_UNSUPPORTED_MESSAGE,
-  isHostVersionUnsupportedError,
-} from '../config/hostCompatibility';
+import { isHostVersionUnsupportedError } from '../config/hostCompatibility';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
-import { createEditAnswers, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createSubmit } from '../protocol/outgoing';
-import type { ClientMessage, HostMessage } from '../protocol/messages';
-import { PeerJsGameTransport } from '../peer/PeerJsGameTransport';
+import { isTerminalJoinError } from '../protocol/gameErrors';
+import { connectionFailureCodes } from '../protocol/connectionFailure';
+import { createEditAnswers, createFinalizationSubmit, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createStartWheelSpin, createSubmit, createWheelSpinHoldCancelled, createWheelSpinHoldStarted } from '../protocol/outgoing';
+import type { ClientMessage, CountriesCitiesWheelState, GameSnapshot, HostMessage } from '../protocol/messages';
+import { wheelSpinRequestKey } from '../protocol/wheel';
+import { isPeerJsAuthenticationError, PeerJsGameTransport } from '../peer/PeerJsGameTransport';
 import { canAutoReconnect, reconnectDelay } from '../peer/reconnectPolicy';
 import type { GameTransport, TransportState } from '../peer/transport';
 import type { JoinParameters } from '../features/connection/joinParams';
 import { createInitialState, gameReducer, type AppState } from '../state/gameStore';
 import { loadPlayerIdentity, savePlayerIdentity, updatePlayerIdentity, type PlayerIdentity, type StoredPlayerIdentity } from '../storage/playerIdentityStorage';
+import {
+  removeUnfinishedMultiplayerSession,
+  saveUnfinishedMultiplayerSession,
+  type UnfinishedMultiplayerSession,
+} from '../storage/unfinishedMultiplayerSessionStorage';
+import {
+  readAnswerDraft,
+  removeAnswerDraft,
+  saveAnswerDraft,
+  type AnswerDraftScope,
+  type FrozenFinalizationResponse,
+} from '../storage/answerDraftStorage';
+
+const UNFINISHED_SESSION_REFRESH_INTERVAL_MS = 60_000;
+const ANSWER_DRAFT_DEBOUNCE_MS = 200;
 
 export interface AppActions {
   updateIdentity: (values: Pick<StoredPlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>) => PlayerIdentity;
-  connect: (parameters: JoinParameters) => Promise<void>;
+  connect: (parameters: JoinParameters, resumeSession?: UnfinishedMultiplayerSession) => Promise<void>;
   cancel: () => void;
   retry: () => void;
   toggleReady: () => void;
+  startWheelSpinHold: () => void;
+  cancelWheelSpinHold: () => void;
+  startWheelSpin: (holdDurationMs?: number) => void;
   setAnswer: (categoryId: string, value: string) => void;
   submitAnswers: () => void;
   editAnswers: () => void;
@@ -51,47 +69,287 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
   const [state, dispatch] = useReducer(gameReducer, createInitialState(initialIdentity, null));
   const stateRef = useRef(state);
   const transportRef = useRef<GameTransport | null>(null);
-  const reconnectRef = useRef({ startedAt: 0, attempt: 0, timer: 0, manuallyClosed: false, everConnected: false });
+  const reconnectRef = useRef({
+    startedAt: 0,
+    attempt: 0,
+    timer: 0,
+    manuallyClosed: false,
+    everConnected: false,
+    terminalJoinRejected: false,
+  });
   const connectionAttemptRef = useRef({
     sequence: 0,
     currentId: null as string | null,
     inFlight: null as Promise<void> | null,
   });
+  const unfinishedSessionRef = useRef({
+    admitted: false,
+    lastSeenSequenceNumber: 0,
+    lastPersistedSequenceNumber: -1,
+    lastPersistAttemptAt: 0,
+    storageUnavailable: false,
+  });
+  const wheelSpinHoldRef = useRef<{ key: string; holdId: string; wheelState: CountriesCitiesWheelState } | null>(null);
+  const frozenFinalizationRef = useRef<FrozenFinalizationResponse | null>(null);
+  const seenFinalizationRef = useRef<{ gameId: string; roundNumber: number } | null>(null);
+  const legacyFallbackSentRef = useRef<string | null>(null);
+  const answerDraftTimerRef = useRef(0);
   const factoryRef = useRef(transportFactory);
   const connectInternalRef = useRef<(parameters: JoinParameters, reconnecting: boolean) => Promise<void>>(() => Promise.resolve());
   useEffect(() => { stateRef.current = state; }, [state]);
 
-  const send = useCallback((message: ClientMessage): void => {
+  const send = useCallback((message: ClientMessage): boolean => {
     const transport = transportRef.current;
     if (!transport) {
       recordConnectionDiagnostic('client-message.skipped', 'warning', { messageType: message.type, reason: 'transport-unavailable' });
-      return;
+      return false;
     }
     if (message.type !== 'client:heartbeat') {
       recordConnectionDiagnostic('client-message.send', 'info', { messageType: message.type });
     }
     try {
       transport.send(message);
+      return true;
     } catch (error) {
       recordConnectionDiagnostic('client-message.send.failed', 'error', {
         messageType: message.type,
         ...getDiagnosticErrorDetails(error),
       });
-      dispatch({ type: 'connection', status: 'error', error: error instanceof Error ? error.message : 'Nie udało się wysłać wiadomości.' });
+      dispatch({ type: 'connection', status: 'error', error: connectionFailureCodes.gameConnectionLost });
+      return false;
     }
   }, []);
 
+  const answerDraftScope = useCallback((current: AppState, snapshot: GameSnapshot | null = current.snapshot): AnswerDraftScope | null => {
+    const round = snapshot?.round;
+    const target = current.joinParameters;
+    if (!target || !snapshot || !round || snapshot.roomId.trim().toUpperCase() !== target.roomId.trim().toUpperCase()) return null;
+    return {
+      hostSessionId: target.hostSessionId,
+      roomId: snapshot.roomId,
+      gameId: snapshot.gameId,
+      roundNumber: round.number,
+      playerId: current.identity.playerId,
+    };
+  }, []);
+
+  const flushCurrentAnswerDraft = useCallback((): void => {
+    const current = stateRef.current;
+    const scope = answerDraftScope(current);
+    if (!scope || current.snapshot?.phase !== 'answering') return;
+    const frozen = frozenFinalizationRef.current;
+    const matchingFrozen = frozen
+      && frozen.gameId === scope.gameId
+      && frozen.roundNumber === scope.roundNumber
+      ? frozen
+      : undefined;
+    saveAnswerDraft({ scope, answers: current.answers, ...(matchingFrozen ? { frozenFinalization: matchingFrozen } : {}) });
+  }, [answerDraftScope]);
+
+  const clearAnswerDraftForState = useCallback((current: AppState): void => {
+    const scope = answerDraftScope(current);
+    if (scope) removeAnswerDraft(scope);
+    frozenFinalizationRef.current = null;
+    seenFinalizationRef.current = null;
+    legacyFallbackSentRef.current = null;
+    window.clearTimeout(answerDraftTimerRef.current);
+    answerDraftTimerRef.current = 0;
+  }, [answerDraftScope]);
+
+  const handleSnapshotAnswerLifecycle = useCallback((snapshot: GameSnapshot): Record<string, string> | null => {
+    const current = stateRef.current;
+    const previousSnapshot = current.snapshot;
+    const previousSequence = previousSnapshot?.sequenceNumber;
+    if ((previousSequence !== undefined && snapshot.sequenceNumber <= previousSequence)
+      || snapshot.sequenceNumber < current.lastSeenSequenceNumber) return null;
+
+    const playerId = current.identity.playerId;
+    if (!snapshot.players.some((player) => player.profile.id === playerId)) return null;
+    const previousScope = answerDraftScope(current, previousSnapshot);
+    const nextScope = answerDraftScope(current, snapshot);
+    const roundChanged = previousSnapshot?.gameId !== undefined
+      && (previousSnapshot.gameId !== snapshot.gameId
+        || previousSnapshot.round?.number !== snapshot.round?.number);
+    if (roundChanged && previousScope) {
+      removeAnswerDraft(previousScope);
+      frozenFinalizationRef.current = null;
+      seenFinalizationRef.current = null;
+      legacyFallbackSentRef.current = null;
+    }
+
+    const stored = nextScope ? readAnswerDraft(nextScope) : null;
+    const sameCurrentRound = previousSnapshot?.gameId === snapshot.gameId
+      && previousSnapshot.round?.number === snapshot.round?.number;
+    const restorableAnswers = snapshot.phase === 'answering'
+      && !snapshot.donePlayerIds.includes(playerId)
+      && !current.hasLocalAnswerDraft
+      ? stored?.answers ?? null
+      : null;
+
+    const finalization = snapshot.answerFinalization;
+    if (finalization && nextScope && snapshot.phase === 'answering' && snapshot.round) {
+      seenFinalizationRef.current = { gameId: snapshot.gameId, roundNumber: snapshot.round.number };
+      if (!snapshot.donePlayerIds.includes(playerId)) {
+        const inMemory = frozenFinalizationRef.current;
+        const storedFrozen = stored?.frozenFinalization;
+        const existingFrozen = inMemory
+          && inMemory.gameId === snapshot.gameId
+          && inMemory.roundNumber === snapshot.round.number
+          && inMemory.finalizationId === finalization.id
+          ? inMemory
+          : storedFrozen
+            && storedFrozen.gameId === snapshot.gameId
+            && storedFrozen.roundNumber === snapshot.round.number
+            && storedFrozen.finalizationId === finalization.id
+            ? storedFrozen
+            : null;
+        const ownSubmission = snapshot.submissions[playerId]?.answers;
+        const answers = existingFrozen?.answers
+          ?? (sameCurrentRound && current.hasLocalAnswerDraft ? current.answers : null)
+          ?? stored?.answers
+          ?? ownSubmission
+          ?? current.answers;
+        try {
+          const message = existingFrozen
+            ? createFinalizationSubmit(current.identity.profile, existingFrozen.answers, existingFrozen.roundNumber, existingFrozen.finalizationId, existingFrozen.requestId)
+            : createFinalizationSubmit(current.identity.profile, answers, snapshot.round.number, finalization.id);
+          const frozen: FrozenFinalizationResponse = existingFrozen ?? {
+            gameId: snapshot.gameId,
+            roundNumber: snapshot.round.number,
+            finalizationId: finalization.id,
+            requestId: message.requestId ?? '',
+            answers: { ...answers },
+          };
+          if (!frozen.requestId) throw new Error('Brak requestId finalizacji.');
+          frozenFinalizationRef.current = frozen;
+          saveAnswerDraft({ scope: nextScope, answers: frozen.answers, frozenFinalization: frozen });
+          send(message);
+        } catch (error) {
+          recordConnectionDiagnostic('answer-finalization.prepare.failed', 'error', getDiagnosticErrorDetails(error));
+        }
+      }
+    }
+
+    const enteringReview = snapshot.phase === 'categoryReview'
+      && previousSnapshot?.phase === 'answering'
+      && previousSnapshot.gameId === snapshot.gameId
+      && previousSnapshot.round?.number === snapshot.round?.number;
+    if (enteringReview && previousScope) {
+      const previousStored = readAnswerDraft(previousScope);
+      const finalizationWasSeen = (seenFinalizationRef.current?.gameId === snapshot.gameId
+        && seenFinalizationRef.current.roundNumber === snapshot.round?.number)
+        || previousStored?.frozenFinalization !== undefined;
+      const fallbackKey = JSON.stringify([snapshot.gameId, snapshot.round?.number, playerId]);
+      if (!finalizationWasSeen
+        && !snapshot.donePlayerIds.includes(playerId)
+        && legacyFallbackSentRef.current !== fallbackKey) {
+        legacyFallbackSentRef.current = fallbackKey;
+        const answers = current.hasLocalAnswerDraft ? current.answers : previousStored?.answers ?? current.answers;
+        try {
+          send(createSubmit(current.identity.profile, answers));
+        } catch (error) {
+          recordConnectionDiagnostic('legacy-finalization.submit.failed', 'error', getDiagnosticErrorDetails(error));
+        }
+      }
+      removeAnswerDraft(previousScope);
+      frozenFinalizationRef.current = null;
+      seenFinalizationRef.current = null;
+    } else if (snapshot.phase === 'gameFinished' && previousScope) {
+      removeAnswerDraft(previousScope);
+      frozenFinalizationRef.current = null;
+      seenFinalizationRef.current = null;
+      legacyFallbackSentRef.current = null;
+    }
+
+    return restorableAnswers;
+  }, [answerDraftScope, send]);
+
+  const removeCurrentUnfinishedSession = useCallback((): void => {
+    const currentState = stateRef.current;
+    if (currentState.joinParameters) {
+      removeUnfinishedMultiplayerSession(currentState.joinParameters, currentState.identity.playerId);
+    }
+    const lifecycle = unfinishedSessionRef.current;
+    lifecycle.admitted = false;
+    lifecycle.lastSeenSequenceNumber = 0;
+    lifecycle.lastPersistedSequenceNumber = -1;
+    lifecycle.lastPersistAttemptAt = 0;
+  }, []);
+
+  const persistCurrentUnfinishedSession = useCallback((now: number, force = false): void => {
+    const lifecycle = unfinishedSessionRef.current;
+    const currentState = stateRef.current;
+    const target = currentState.joinParameters;
+    if (!lifecycle.admitted || lifecycle.storageUnavailable || !target) return;
+    if (!force
+      && lifecycle.lastSeenSequenceNumber <= lifecycle.lastPersistedSequenceNumber
+      && now - lifecycle.lastPersistAttemptAt < UNFINISHED_SESSION_REFRESH_INTERVAL_MS) return;
+
+    lifecycle.lastPersistAttemptAt = now;
+    const saved = saveUnfinishedMultiplayerSession({
+      target,
+      playerId: currentState.identity.playerId,
+      reconnectToken: currentState.identity.reconnectToken,
+      lastSeenSequenceNumber: lifecycle.lastSeenSequenceNumber,
+      lastUsedAt: now,
+    });
+    if (!saved) {
+      lifecycle.storageUnavailable = true;
+      recordConnectionDiagnostic('unfinished-session.storage-unavailable', 'warning');
+      return;
+    }
+    lifecycle.lastPersistedSequenceNumber = Math.max(
+      lifecycle.lastPersistedSequenceNumber,
+      lifecycle.lastSeenSequenceNumber,
+    );
+  }, []);
+
   const handleMessage = useCallback((message: HostMessage): void => {
+    const receivedAt = Date.now();
+    const snapshot = snapshotFromHostMessage(message);
+    const restoredAnswers = snapshot ? handleSnapshotAnswerLifecycle(snapshot) : null;
+    if (message.type === 'game:reset') clearAnswerDraftForState(stateRef.current);
     if (message.type !== 'host:heartbeat') {
       recordConnectionDiagnostic('host-message.received', 'info', hostMessageDiagnosticDetails(message));
     }
-    dispatch({ type: 'host-message', message, receivedAt: Date.now() });
-  }, []);
+
+    const lifecycle = unfinishedSessionRef.current;
+    const sequenceNumber = hostMessageSequenceNumber(message);
+    if (sequenceNumber !== null) {
+      lifecycle.lastSeenSequenceNumber = Math.max(lifecycle.lastSeenSequenceNumber, sequenceNumber);
+    }
+
+    if (isTerminalJoinError(message)) {
+      const current = reconnectRef.current;
+      current.terminalJoinRejected = true;
+      window.clearTimeout(current.timer);
+      current.timer = 0;
+      removeCurrentUnfinishedSession();
+      recordConnectionDiagnostic('join.rejected', 'warning', { code: message.code });
+      transportRef.current?.close();
+    } else {
+      if (!lifecycle.admitted && hostMessageAdmitsPlayer(message, stateRef.current.identity.playerId)) {
+        lifecycle.admitted = true;
+        recordConnectionDiagnostic('unfinished-session.admitted', 'info', {
+          lastSeenSequenceNumber: lifecycle.lastSeenSequenceNumber,
+        });
+        persistCurrentUnfinishedSession(receivedAt, true);
+      } else if (lifecycle.admitted) {
+        persistCurrentUnfinishedSession(receivedAt);
+      }
+    }
+    dispatch({ type: 'host-message', message, receivedAt });
+    if (restoredAnswers) dispatch({ type: 'restore-draft', answers: restoredAnswers });
+  }, [clearAnswerDraftForState, handleSnapshotAnswerLifecycle, persistCurrentUnfinishedSession, removeCurrentUnfinishedSession]);
 
   const scheduleReconnect = useCallback((): void => {
     const current = reconnectRef.current;
     const parameters = stateRef.current.joinParameters;
-    if (stateRef.current.connectionError === HOST_VERSION_UNSUPPORTED_MESSAGE) {
+    if (current.terminalJoinRejected) {
+      recordConnectionDiagnostic('reconnect.skipped', 'info', { reason: 'terminal-join-rejection' });
+      return;
+    }
+    if (stateRef.current.connectionError === connectionFailureCodes.unsupportedVersion) {
       recordConnectionDiagnostic('reconnect.skipped', 'info', { reason: 'host-version-unsupported' });
       return;
     }
@@ -127,7 +385,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         online: navigator.onLine,
         lastConnectionError: stateRef.current.connectionError,
       });
-      dispatch({ type: 'connection', status: 'lost', error: 'Automatyczne ponowne łączenie nie powiodło się.' });
+      dispatch({ type: 'connection', status: 'lost', error: connectionFailureCodes.gameConnectionLost });
       return;
     }
     const delayMs = reconnectDelay(current.attempt);
@@ -141,9 +399,13 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     dispatch({ type: 'connection', status: 'reconnecting' });
     current.timer = window.setTimeout(() => {
       current.timer = 0;
-      if (current.manuallyClosed || connectionAttemptRef.current.inFlight !== null) {
+      if (current.manuallyClosed || current.terminalJoinRejected || connectionAttemptRef.current.inFlight !== null) {
         recordConnectionDiagnostic('reconnect.timer.cancelled', 'info', {
-          reason: current.manuallyClosed ? 'manually-closed' : 'connection-attempt-in-flight',
+          reason: current.manuallyClosed
+            ? 'manually-closed'
+            : current.terminalJoinRejected
+              ? 'terminal-join-rejection'
+              : 'connection-attempt-in-flight',
         });
         return;
       }
@@ -197,7 +459,8 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     const isCurrentAttempt = (): boolean =>
       connectionAttemptRef.current.currentId === connectionAttemptId
       && transportRef.current === transport
-      && !reconnectRef.current.manuallyClosed;
+      && !reconnectRef.current.manuallyClosed
+      && !reconnectRef.current.terminalJoinRejected;
 
     let handshakeSent = false;
     const sendInitialHandshake = (): void => {
@@ -257,7 +520,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
               reason: 'stale-attempt',
             });
           },
-          onError: (message) => {
+          onError: (failureCode) => {
             if (!isCurrentAttempt()) {
               recordConnectionDiagnostic('transport.user-error.ignored', 'info', {
                 connectionAttemptId,
@@ -265,8 +528,8 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
               });
               return;
             }
-            recordConnectionDiagnostic('transport.user-error', 'error', { connectionAttemptId, userMessage: message });
-            dispatch({ type: 'connection', status: 'error', error: message });
+            recordConnectionDiagnostic('transport.user-error', 'error', { connectionAttemptId, failureCode });
+            dispatch({ type: 'connection', status: 'error', error: failureCode });
           },
         }, { connectionAttemptId });
         if (!isCurrentAttempt()) {
@@ -299,7 +562,13 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
           attempt: current.attempt,
           ...getDiagnosticErrorDetails(error),
         });
-        shouldReconnect = !isHostVersionUnsupportedError(error);
+        const permanentFailure = isHostVersionUnsupportedError(error) || isPeerJsAuthenticationError(error);
+        if (permanentFailure) {
+          window.clearTimeout(current.timer);
+          current.timer = 0;
+          removeCurrentUnfinishedSession();
+        }
+        shouldReconnect = !permanentFailure;
       } finally {
         if (connectionAttemptRef.current.currentId === connectionAttemptId) {
           connectionAttemptRef.current.inFlight = null;
@@ -309,13 +578,13 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     })();
     connectionAttemptRef.current.inFlight = attemptPromise;
     return attemptPromise;
-  }, [handleMessage, onTransportState, scheduleReconnect]);
+  }, [handleMessage, onTransportState, removeCurrentUnfinishedSession, scheduleReconnect]);
 
   useEffect(() => {
     connectInternalRef.current = connectInternal;
   }, [connectInternal]);
 
-  const connect = useCallback((parameters: JoinParameters): Promise<void> => {
+  const connect = useCallback((parameters: JoinParameters, resumeSession?: UnfinishedMultiplayerSession): Promise<void> => {
     const existingAttempt = connectionAttemptRef.current.inFlight;
     if (existingAttempt !== null) {
       recordConnectionDiagnostic('connection.request.deduplicated', 'warning', {
@@ -325,7 +594,47 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     }
 
     clearConnectionDiagnostics();
-    recordConnectionDiagnostic('connection.session.started', 'info', getConnectionRuntimeDetails(parameters.roomId));
+    const previousParameters = stateRef.current.joinParameters;
+    if (previousParameters
+      && (previousParameters.roomId !== parameters.roomId
+        || previousParameters.hostSessionId !== parameters.hostSessionId)) {
+      clearAnswerDraftForState(stateRef.current);
+    }
+    const resumingStoredSession = resumeSession !== undefined;
+    recordConnectionDiagnostic(
+      resumingStoredSession ? 'connection.session.resume-requested' : 'connection.session.started',
+      'info',
+      getConnectionRuntimeDetails(parameters.roomId),
+    );
+
+    const lifecycle = unfinishedSessionRef.current;
+    lifecycle.admitted = false;
+    lifecycle.lastSeenSequenceNumber = resumeSession?.lastSeenSequenceNumber ?? 0;
+    lifecycle.lastPersistedSequenceNumber = resumeSession?.lastSeenSequenceNumber ?? -1;
+    lifecycle.lastPersistAttemptAt = 0;
+    lifecycle.storageUnavailable = false;
+
+    if (resumeSession) {
+      const currentIdentity = stateRef.current.identity;
+      const restoredIdentity: PlayerIdentity = {
+        ...currentIdentity,
+        playerId: resumeSession.playerId,
+        reconnectToken: resumeSession.reconnectToken,
+        profile: { ...currentIdentity.profile, id: resumeSession.playerId },
+      };
+      savePlayerIdentity(restoredIdentity);
+      stateRef.current = {
+        ...createInitialState(restoredIdentity, parameters),
+        lastSeenSequenceNumber: resumeSession.lastSeenSequenceNumber,
+      };
+      dispatch({
+        type: 'resume-session',
+        identity: restoredIdentity,
+        parameters,
+        lastSeenSequenceNumber: resumeSession.lastSeenSequenceNumber,
+      });
+    }
+
     const current = reconnectRef.current;
     window.clearTimeout(current.timer);
     current.startedAt = 0;
@@ -333,11 +642,12 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     current.timer = 0;
     current.manuallyClosed = false;
     current.everConnected = false;
+    current.terminalJoinRejected = false;
     connectionAttemptRef.current.currentId = null;
     transportRef.current?.close();
     transportRef.current = null;
-    return connectInternal(parameters, false);
-  }, [connectInternal]);
+    return connectInternal(parameters, resumingStoredSession);
+  }, [clearAnswerDraftForState, connectInternal]);
 
   const cancel = useCallback((): void => {
     recordConnectionDiagnostic('connection.cancelled-by-user', 'info', {
@@ -345,6 +655,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     });
     const current = reconnectRef.current;
     current.manuallyClosed = true;
+    current.terminalJoinRejected = false;
     window.clearTimeout(current.timer);
     current.timer = 0;
     connectionAttemptRef.current.currentId = null;
@@ -357,7 +668,11 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
 
   const retry = useCallback((): void => {
     const parameters = stateRef.current.joinParameters;
-    if (stateRef.current.connectionError === HOST_VERSION_UNSUPPORTED_MESSAGE) {
+    if (reconnectRef.current.terminalJoinRejected) {
+      recordConnectionDiagnostic('connection.retry.skipped', 'info', { reason: 'terminal-join-rejection' });
+      return;
+    }
+    if (stateRef.current.connectionError === connectionFailureCodes.unsupportedVersion) {
       recordConnectionDiagnostic('connection.retry.skipped', 'info', { reason: 'host-version-unsupported' });
       return;
     }
@@ -381,6 +696,27 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     current.manuallyClosed = false;
     void connectInternal(parameters, true);
   }, [connectInternal]);
+
+  useEffect(() => {
+    window.clearTimeout(answerDraftTimerRef.current);
+    answerDraftTimerRef.current = 0;
+    if (state.snapshot?.phase !== 'answering' || !state.snapshot.round || !state.joinParameters) return undefined;
+    answerDraftTimerRef.current = window.setTimeout(() => {
+      answerDraftTimerRef.current = 0;
+      flushCurrentAnswerDraft();
+    }, ANSWER_DRAFT_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(answerDraftTimerRef.current);
+      answerDraftTimerRef.current = 0;
+    };
+  }, [state.answers, state.gameId, state.joinParameters, state.snapshot?.phase, state.snapshot?.round, flushCurrentAnswerDraft]);
+
+  useEffect(() => {
+    if (state.snapshot?.phase !== 'answering' || state.deadlineAt === null) return undefined;
+    const delay = Math.max(0, state.deadlineAt - Date.now());
+    const timer = window.setTimeout(flushCurrentAnswerDraft, delay);
+    return () => window.clearTimeout(timer);
+  }, [state.deadlineAt, state.snapshot?.phase, state.snapshot?.round?.number, flushCurrentAnswerDraft]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -415,18 +751,25 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     };
     const online = (): void => resume('online');
     const pageShow = (): void => resume('pageshow');
-    const visibility = (): void => { if (document.visibilityState === 'visible') resume('visibilitychange'); };
+    const pageHide = (): void => flushCurrentAnswerDraft();
+    const visibility = (): void => {
+      if (document.visibilityState === 'hidden') flushCurrentAnswerDraft();
+      else resume('visibilitychange');
+    };
     window.addEventListener('online', online);
     window.addEventListener('pageshow', pageShow);
+    window.addEventListener('pagehide', pageHide);
     document.addEventListener('visibilitychange', visibility);
     return () => {
       window.removeEventListener('online', online);
       window.removeEventListener('pageshow', pageShow);
+      window.removeEventListener('pagehide', pageHide);
       document.removeEventListener('visibilitychange', visibility);
     };
-  }, [retry]);
+  }, [flushCurrentAnswerDraft, retry]);
 
   useEffect(() => () => {
+    flushCurrentAnswerDraft();
     reconnectRef.current.manuallyClosed = true;
     window.clearTimeout(reconnectRef.current.timer);
     reconnectRef.current.timer = 0;
@@ -435,7 +778,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     const transport = transportRef.current;
     transportRef.current = null;
     transport?.close();
-  }, []);
+  }, [flushCurrentAnswerDraft]);
 
   const updateIdentityAction = useCallback((values: Pick<StoredPlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>): PlayerIdentity => {
     const identity = updatePlayerIdentity(stateRef.current.identity, values);
@@ -455,19 +798,73 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       send(createGameReady(stateRef.current.identity.playerId, next));
       dispatch({ type: 'ready', value: next });
     },
-    setAnswer: (categoryId, value) => dispatch({ type: 'answer', categoryId, value }),
+    startWheelSpinHold: () => {
+      const current = stateRef.current;
+      const wheelState = current.snapshot?.wheelState;
+      if (current.connectionStatus !== 'connected'
+        || !wheelState
+        || wheelState.phase !== 'waiting'
+        || wheelState.selectedPlayerId !== current.identity.playerId
+        || Date.now() >= wheelState.waitingDeadlineAt) return;
+      const key = wheelSpinRequestKey(wheelState);
+      if (current.pendingWheelSpinRequestKey === key || wheelSpinHoldRef.current?.key === key) return;
+      const message = createWheelSpinHoldStarted(current.identity.playerId, wheelState);
+      if (!send(message)) return;
+      wheelSpinHoldRef.current = { key, holdId: message.holdId, wheelState };
+    },
+    cancelWheelSpinHold: () => {
+      const activeHold = wheelSpinHoldRef.current;
+      wheelSpinHoldRef.current = null;
+      if (!activeHold) return;
+      const current = stateRef.current;
+      if (current.connectionStatus !== 'connected') return;
+      send(createWheelSpinHoldCancelled(
+        current.identity.playerId,
+        activeHold.wheelState,
+        activeHold.holdId,
+      ));
+    },
+    startWheelSpin: (holdDurationMs) => {
+      const current = stateRef.current;
+      const wheelState = current.snapshot?.wheelState;
+      if (current.connectionStatus !== 'connected'
+        || !wheelState
+        || wheelState.phase !== 'waiting'
+        || wheelState.selectedPlayerId !== current.identity.playerId) return;
+      const key = wheelSpinRequestKey(wheelState);
+      const activeHold = wheelSpinHoldRef.current?.key === key ? wheelSpinHoldRef.current : null;
+      if (Date.now() >= wheelState.waitingDeadlineAt && activeHold === null) return;
+      if (current.pendingWheelSpinRequestKey === key) return;
+      wheelSpinHoldRef.current = null;
+      if (!send(createStartWheelSpin(current.identity.playerId, wheelState, holdDurationMs, activeHold?.holdId))) return;
+      stateRef.current = { ...current, pendingWheelSpinRequestKey: key };
+      dispatch({ type: 'wheel-spin-requested', key });
+    },
+    setAnswer: (categoryId, value) => {
+      const current = stateRef.current;
+      if (isAnswerEditingLocked(current)) return;
+      dispatch({ type: 'answer', categoryId, value });
+    },
     submitAnswers: () => {
       const current = stateRef.current;
-      send(createSubmit(current.identity.profile, current.answers));
-      dispatch({ type: 'submitted', value: true });
+      if (isAnswerEditingLocked(current)) return;
+      try {
+        const message = createSubmit(current.identity.profile, current.answers);
+        if (!send(message)) return;
+        flushCurrentAnswerDraft();
+        dispatch({ type: 'submitted', value: true });
+      } catch (error) {
+        recordConnectionDiagnostic('answers.submit.failed', 'error', getDiagnosticErrorDetails(error));
+      }
     },
     editAnswers: () => {
       const current = stateRef.current;
-      send(createEditAnswers(current.identity.playerId));
+      if (isAnswerEditingLocked(current)) return;
+      if (!send(createEditAnswers(current.identity.playerId))) return;
       dispatch({ type: 'submitted', value: false });
     },
     clearNotice: () => dispatch({ type: 'clear-notice' }),
-  }), [cancel, connect, retry, send, updateIdentityAction]);
+  }), [cancel, connect, flushCurrentAnswerDraft, retry, send, updateIdentityAction]);
 
   return <AppContext.Provider value={{ state, actions }}>{children}</AppContext.Provider>;
 }
@@ -478,8 +875,46 @@ export function useApp(): AppContextValue {
   return context;
 }
 
+function snapshotFromHostMessage(message: HostMessage): GameSnapshot | null {
+  if (message.type === 'game:snapshot' || message.type === 'host:migrated') return message.snapshot;
+  return null;
+}
+
+function isAnswerEditingLocked(state: AppState, now = Date.now()): boolean {
+  if (state.snapshot?.phase !== 'answering') return true;
+  if (state.snapshot.answerFinalization) return true;
+  return state.deadlineAt !== null && now >= state.deadlineAt;
+}
+
 function createConnectionAttemptId(sequence: number): string {
   return `web-${Date.now().toString(36)}-${sequence.toString(36)}`;
+}
+
+function hostMessageSequenceNumber(message: HostMessage): number | null {
+  switch (message.type) {
+    case 'host:heartbeat':
+    case 'host:lost':
+    case 'host:migration-started':
+      return message.sequenceNumber;
+    case 'game:snapshot':
+      return message.snapshot.sequenceNumber;
+    case 'host:migrated':
+      return Math.max(message.sequenceNumber, message.snapshot.sequenceNumber);
+    default:
+      return null;
+  }
+}
+
+function hostMessageAdmitsPlayer(message: HostMessage, playerId: string): boolean {
+  switch (message.type) {
+    case 'room:players':
+      return message.players.some((player) => player.id === playerId);
+    case 'game:snapshot':
+    case 'host:migrated':
+      return message.snapshot.players.some((player) => player.profile.id === playerId);
+    default:
+      return false;
+  }
 }
 
 function hostMessageDiagnosticDetails(message: HostMessage): ConnectionDiagnosticDetails {

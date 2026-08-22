@@ -1,7 +1,7 @@
-import { SUPPORTED_GAME_PROTOCOL_VERSION } from '../protocol/constants';
+import { PEER_JS_ONLINE_PROTOCOL_VERSION } from '../protocol/constants';
 
 export const MIN_SUPPORTED_HOST_BUILD_NUMBER = 10;
-export const REQUIRED_HOST_PROTOCOL_VERSION = SUPPORTED_GAME_PROTOCOL_VERSION;
+export const REQUIRED_HOST_PROTOCOL_VERSION = PEER_JS_ONLINE_PROTOCOL_VERSION;
 export const HOST_VERSION_HANDSHAKE_TIMEOUT_MS = 5_000;
 export const HOST_VERSION_UNSUPPORTED_MESSAGE =
   'Prowadzący używa starszej wersji gry. Aby dołączyć do pokoju, poproś prowadzącego o aktualizację aplikacji Państwa Miasta.';

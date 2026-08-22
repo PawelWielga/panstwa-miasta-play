@@ -1,6 +1,13 @@
-import { hostMessageTypes, MAX_MESSAGE_BYTES, SUPPORTED_GAME_PROTOCOL_VERSION } from './constants';
+import {
+  hostMessageTypes,
+  MAX_MESSAGE_BYTES,
+  MAX_SNAPSHOT_CHUNK_COUNT,
+  SNAPSHOT_CHUNK_PAYLOAD_MAX_LENGTH,
+  SUPPORTED_GAME_PROTOCOL_VERSION,
+} from './constants';
 import { encodedMessageSize } from './messageSize';
-import type { HostMessage, JsonValue } from './messages';
+import type { GameSnapshotChunkHostMessage, HostMessage, JsonValue } from './messages';
+import { GameSnapshotChunkAssembler } from './snapshotChunks';
 import {
   hasValidMetadata, isBoundedString, isFiniteNumber, isInteger, isJsonValue, isRecord,
   parseAnswerResults, parseCategories, parseNumberMap, parsePlayerProfile, parseSettings,
@@ -8,6 +15,7 @@ import {
 } from './validation';
 
 const knownTypes = new Set<string>(hostMessageTypes);
+const snapshotChunkAssembler = new GameSnapshotChunkAssembler();
 
 export type HostMessageParseResult = { ok: true; message: HostMessage } | { ok: false; reason: string };
 
@@ -38,6 +46,28 @@ export function parseHostMessage(data: unknown): HostMessageParseResult {
     }
     case 'game:snapshot': {
       const snapshot = parseSnapshot(data.snapshot); return snapshot ? ok({ type: data.type, snapshot, ...metadata }) : invalid();
+    }
+    case 'game:snapshot-chunk': {
+      const { gameId, sequenceNumber, chunkIndex, chunkCount, payload } = data;
+      if (
+        typeof gameId !== 'string' || !isBoundedString(gameId, 128)
+        || typeof sequenceNumber !== 'number' || !Number.isInteger(sequenceNumber) || sequenceNumber < 0
+        || typeof chunkIndex !== 'number' || !Number.isInteger(chunkIndex) || chunkIndex < 0
+        || typeof chunkCount !== 'number' || !Number.isInteger(chunkCount) || chunkCount <= 0 || chunkCount > MAX_SNAPSHOT_CHUNK_COUNT
+        || chunkIndex >= chunkCount
+        || typeof payload !== 'string' || !isBoundedString(payload, SNAPSHOT_CHUNK_PAYLOAD_MAX_LENGTH)
+      ) return invalid();
+      const chunk: GameSnapshotChunkHostMessage = {
+        type: data.type,
+        gameId,
+        sequenceNumber,
+        chunkIndex,
+        chunkCount,
+        payload,
+        ...metadata,
+      };
+      const snapshot = snapshotChunkAssembler.add(chunk);
+      return snapshot ? ok({ type: 'game:snapshot', snapshot, ...metadata }) : ok(chunk);
     }
     case 'countries-cities:settings': {
       const categories = parseCategories(data.categories); const settings = parseSettings(data.settings);

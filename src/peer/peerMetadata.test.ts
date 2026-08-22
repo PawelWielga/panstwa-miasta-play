@@ -1,7 +1,12 @@
 import { expect, it } from 'vitest';
-import { SUPPORTED_GAME_PROTOCOL_VERSION } from '../protocol/constants';
+import { PEER_JS_ONLINE_PROTOCOL_VERSION } from '../protocol/constants';
+import { joinParameters } from '../test/fixtures';
 import { createPeerMetadata } from './peerMetadata';
 
-it('creates Flutter-compatible PeerJS metadata from the room code only', () => {
-  expect(createPeerMetadata(' abC123 ')).toEqual({ room: 'ABC123', protocol: SUPPORTED_GAME_PROTOCOL_VERSION });
+it('creates session-scoped PeerJS metadata without the join secret', () => {
+  expect(createPeerMetadata(joinParameters)).toEqual({
+    hostSessionId: joinParameters.hostSessionId,
+    protocol: PEER_JS_ONLINE_PROTOCOL_VERSION,
+  });
+  expect(JSON.stringify(createPeerMetadata(joinParameters))).not.toContain(joinParameters.onlineJoinCode);
 });
