@@ -315,6 +315,42 @@ describe('AppProvider connection lifecycle', () => {
     expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
   });
 
+  it('acknowledges intentional host shutdown and never starts reconnect', async () => {
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+    act(() => {
+      getTransport(transports, 0).emitMessage({ type: 'room:players', protocolVersion: 4, players: [currentState.identity.profile] });
+    });
+    expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
+    const playerId = currentState.identity.playerId;
+    act(() => {
+      getTransport(transports, 0).emitMessage({ type: 'host:room-closed', gameId: joinParameters.roomId, shutdownId: 'shutdown-1', requestId: 'shutdown-1' });
+    });
+    expect(getTransport(transports, 0).send).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'client:room-closed-ack', gameId: joinParameters.roomId, shutdownId: 'shutdown-1', playerId }));
+    expect(currentState.hostClosedRoom).toBe(true);
+    expect(currentState.connectionStatus).toBe('closed');
+    expect(readLatestUnfinishedMultiplayerSession()).toBeNull();
+    act(() => {
+      getTransport(transports, 0).emitState('closed');
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('pageshow'));
+    });
+    expect(transports).toHaveLength(1);
+    act(() => { actions.returnToMain(); });
+    expect(currentState.hostClosedRoom).toBe(false);
+    expect(currentState.connectionStatus).toBe('idle');
+  });
+
   it('does not start retry while the previous attempt is still in flight', async () => {
     const transports: DeferredTransport[] = [];
     renderProvider(() => {

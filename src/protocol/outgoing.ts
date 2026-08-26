@@ -1,5 +1,5 @@
 import { MAX_MESSAGE_BYTES, REQUEST_ID_MAX_LENGTH, SUPPORTED_GAME_PROTOCOL_VERSION } from './constants';
-import type { ClientMessage, CountriesCitiesSubmitMessage, CountriesCitiesWheelSpinHoldCancelledMessage, CountriesCitiesWheelSpinHoldStartedMessage, CountriesCitiesWheelState, JsonValue, PlayerProfile } from './messages';
+import type { ClientMessage, ClientRoomClosedAcknowledgementMessage, CountriesCitiesSubmitMessage, CountriesCitiesWheelSpinHoldCancelledMessage, CountriesCitiesWheelSpinHoldStartedMessage, CountriesCitiesWheelState, JsonValue, PlayerProfile } from './messages';
 import { generateRequestId } from '../utils/ids';
 import { encodedMessageSize } from './messageSize';
 import { isBoundedString, parseSubmissionAnswers } from './validation';
@@ -15,6 +15,22 @@ export function createPlayerHello(identity: IdentityCredentials): ClientMessage 
 export function createGameReady(playerId: string, ready: boolean): ClientMessage { return { type: 'game:ready', ready, ...meta(playerId) }; }
 export function createHeartbeat(playerId: string, gameId: string, sequence: number): ClientMessage {
   return { type: 'client:heartbeat', gameId, playerId, lastSeenSequenceNumber: sequence, senderId: playerId, sentAt: Date.now() };
+}
+export function createRoomClosedAcknowledgement(
+  playerId: string,
+  gameId: string,
+  shutdownId: string,
+  requestId?: string,
+): ClientRoomClosedAcknowledgementMessage {
+  return {
+    type: 'client:room-closed-ack',
+    gameId,
+    shutdownId,
+    playerId,
+    senderId: playerId,
+    sentAt: Date.now(),
+    ...(requestId ? { requestId } : {}),
+  };
 }
 export function createRejoin(profile: PlayerProfile, lastSeenSequenceNumber: number): ClientMessage {
   return { type: 'client:rejoin', protocolVersion: SUPPORTED_GAME_PROTOCOL_VERSION, player: profile, lastSeenSequenceNumber, ...meta(profile.id) };

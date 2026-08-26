@@ -142,6 +142,11 @@ export interface HostHeartbeatMessage extends MessageMetadata {
   gameId: string;
   sequenceNumber: number;
 }
+export interface HostRoomClosedMessage extends MessageMetadata {
+  type: 'host:room-closed';
+  gameId: string;
+  shutdownId: string;
+}
 export interface HostLostMessage extends MessageMetadata {
   type: 'host:lost'; gameId: string; lostHostPlayerId: string; sequenceNumber: number;
 }
@@ -176,7 +181,7 @@ export interface CountriesCitiesResultsMessage extends MessageMetadata {
 
 export type HostMessage =
   | RoomPlayersMessage | GameResetMessage | GameStartMessage | GameErrorMessage
-  | HostHeartbeatMessage | HostLostMessage | HostMigrationStartedMessage | HostMigratedMessage
+  | HostHeartbeatMessage | HostRoomClosedMessage | HostLostMessage | HostMigrationStartedMessage | HostMigratedMessage
   | GameSnapshotMessage | GameSnapshotChunkHostMessage | CountriesCitiesSettingsMessage | CountriesCitiesStartRoundMessage
   | CountriesCitiesDeadlineMessage | CountriesCitiesReviewMessage | CountriesCitiesVoteMessage
   | CountriesCitiesReviewReadyMessage | CountriesCitiesRevealMessage | CountriesCitiesResultsMessage;
@@ -187,6 +192,9 @@ export interface PlayerHelloMessage extends MessageMetadata {
 export interface GameReadyMessage extends MessageMetadata { type: 'game:ready'; ready: boolean }
 export interface ClientHeartbeatMessage extends MessageMetadata {
   type: 'client:heartbeat'; gameId: string; playerId: string; lastSeenSequenceNumber: number;
+}
+export interface ClientRoomClosedAcknowledgementMessage extends MessageMetadata {
+  type: 'client:room-closed-ack'; gameId: string; shutdownId: string; playerId: string;
 }
 export interface ClientRejoinMessage extends MessageMetadata {
   type: 'client:rejoin'; protocolVersion: number; player: PlayerProfile; lastSeenSequenceNumber: number;
@@ -217,4 +225,4 @@ export interface CountriesCitiesStartWheelSpinMessage extends MessageMetadata {
   holdDurationMs?: number;
   holdId?: string;
 }
-export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage | CountriesCitiesWheelSpinHoldStartedMessage | CountriesCitiesWheelSpinHoldCancelledMessage | CountriesCitiesStartWheelSpinMessage;
+export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRoomClosedAcknowledgementMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage | CountriesCitiesWheelSpinHoldStartedMessage | CountriesCitiesWheelSpinHoldCancelledMessage | CountriesCitiesStartWheelSpinMessage;
