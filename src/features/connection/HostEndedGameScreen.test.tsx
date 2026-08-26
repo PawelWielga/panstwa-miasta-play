@@ -11,10 +11,9 @@ describe('HostEndedGameScreen', () => {
   it('shows one clear return action', () => {
     render(<HostEndedGameScreen />);
     expect(screen.getByRole('heading', { name: 'Host zakończył rozgrywkę' })).toBeInTheDocument();
-    const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(1);
-    expect(buttons[0]).toHaveTextContent('Wróć do ekranu głównego');
-    fireEvent.click(buttons[0]);
+    const button = screen.getByRole('button', { name: 'Wróć do ekranu głównego' });
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    fireEvent.click(button);
     expect(mocks.returnToMain).toHaveBeenCalledTimes(1);
   });
 });
