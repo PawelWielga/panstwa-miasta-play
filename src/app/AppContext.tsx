@@ -20,7 +20,7 @@ import { isHostVersionUnsupportedError } from '../config/hostCompatibility';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
 import { isTerminalJoinError } from '../protocol/gameErrors';
 import { connectionFailureCodes } from '../protocol/connectionFailure';
-import { createEditAnswers, createFinalizationSubmit, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createStartWheelSpin, createSubmit, createWheelSpinHoldCancelled, createWheelSpinHoldStarted } from '../protocol/outgoing';
+import { createEditAnswers, createFinalizationSubmit, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createRoomClosedAcknowledgement, createStartWheelSpin, createSubmit, createWheelSpinHoldCancelled, createWheelSpinHoldStarted } from '../protocol/outgoing';
 import type { ClientMessage, CountriesCitiesWheelState, GameSnapshot, HostMessage } from '../protocol/messages';
 import { wheelSpinRequestKey } from '../protocol/wheel';
 import { isPeerJsAuthenticationError, PeerJsGameTransport } from '../peer/PeerJsGameTransport';
@@ -49,6 +49,7 @@ export interface AppActions {
   updateIdentity: (values: Pick<StoredPlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>) => PlayerIdentity;
   connect: (parameters: JoinParameters, resumeSession?: UnfinishedMultiplayerSession) => Promise<void>;
   cancel: () => void;
+  returnToMain: () => void;
   retry: () => void;
   toggleReady: () => void;
   startWheelSpinHold: () => void;
@@ -306,6 +307,27 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
 
   const handleMessage = useCallback((message: HostMessage): void => {
     const receivedAt = Date.now();
+    if (message.type === 'host:room-closed') {
+      const current = reconnectRef.current;
+      current.manuallyClosed = true;
+      current.terminalJoinRejected = false;
+      window.clearTimeout(current.timer);
+      current.timer = 0;
+      clearAnswerDraftForState(stateRef.current);
+      removeCurrentUnfinishedSession();
+      send(createRoomClosedAcknowledgement(
+        stateRef.current.identity.playerId,
+        message.gameId,
+        message.shutdownId,
+        message.requestId,
+      ));
+      dispatch({ type: 'host-message', message, receivedAt });
+      recordConnectionDiagnostic('host-room.closed', 'info', {
+        gameId: message.gameId,
+        shutdownId: message.shutdownId,
+      });
+      return;
+    }
     const snapshot = snapshotFromHostMessage(message);
     const restoredAnswers = snapshot ? handleSnapshotAnswerLifecycle(snapshot) : null;
     if (message.type === 'game:reset') clearAnswerDraftForState(stateRef.current);
@@ -340,7 +362,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     }
     dispatch({ type: 'host-message', message, receivedAt });
     if (restoredAnswers) dispatch({ type: 'restore-draft', answers: restoredAnswers });
-  }, [clearAnswerDraftForState, handleSnapshotAnswerLifecycle, persistCurrentUnfinishedSession, removeCurrentUnfinishedSession]);
+  }, [clearAnswerDraftForState, handleSnapshotAnswerLifecycle, persistCurrentUnfinishedSession, removeCurrentUnfinishedSession, send]);
 
   const scheduleReconnect = useCallback((): void => {
     const current = reconnectRef.current;
@@ -666,6 +688,12 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     dispatch({ type: 'connection', status: 'closed' });
   }, []);
 
+  const returnToMain = useCallback((): void => {
+    cancel();
+    stateRef.current = createInitialState(stateRef.current.identity, null);
+    dispatch({ type: 'return-to-main' });
+  }, [cancel]);
+
   const retry = useCallback((): void => {
     const parameters = stateRef.current.joinParameters;
     if (reconnectRef.current.terminalJoinRejected) {
@@ -792,6 +820,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     updateIdentity: updateIdentityAction,
     connect,
     cancel,
+    returnToMain,
     retry,
     toggleReady: () => {
       const next = !stateRef.current.localReady;
@@ -864,7 +893,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       dispatch({ type: 'submitted', value: false });
     },
     clearNotice: () => dispatch({ type: 'clear-notice' }),
-  }), [cancel, connect, flushCurrentAnswerDraft, retry, send, updateIdentityAction]);
+  }), [cancel, connect, flushCurrentAnswerDraft, retry, returnToMain, send, updateIdentityAction]);
 
   return <AppContext.Provider value={{ state, actions }}>{children}</AppContext.Provider>;
 }

@@ -515,3 +515,12 @@ Android pozostaje źródłem prawdy. Host ocenia, czy przytrzymanie rozpoczęło
 
 Zmiana jest kompatybilna wstecznie: starszy host ignoruje nieznany `player:wheelSpinHoldStarted`, a dodatkowe pole `holdId` w `player:startWheelSpin` jest opcjonalne. Zwolnienie przycisku przed deadlinem zachowuje dotychczasowe działanie także ze starszym hostem.
 
+
+
+## Graceful host shutdown
+
+When the Android host intentionally closes a room it broadcasts `host:room-closed` with `gameId` and a unique `shutdownId`. The web client immediately sends `client:room-closed-ack` with the same identifiers and its `playerId`, marks the close as intentional, clears the unfinished-session record and suppresses reconnect.
+
+The browser then shows a terminal `Host zakończył rozgrywkę` screen with a single action returning to the main join screen. Transport `closed`/`error` callbacks arriving after the shutdown message must not enter the normal reconnect path.
+
+This is an additive protocol extension and does not change protocol version 3.

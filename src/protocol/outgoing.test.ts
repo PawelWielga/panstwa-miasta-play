@@ -7,7 +7,7 @@ import {
   REQUEST_ID_MAX_LENGTH,
   SUPPORTED_GAME_PROTOCOL_VERSION,
 } from './constants';
-import { createFinalizationSubmit, createPlayerHello, createRejoin, createStartWheelSpin, createSubmit, createWheelSpinHoldStarted } from './outgoing';
+import { createFinalizationSubmit, createPlayerHello, createRejoin, createRoomClosedAcknowledgement, createStartWheelSpin, createSubmit, createWheelSpinHoldStarted } from './outgoing';
 
 const profile = { id: 'player-1', name: 'Ala', color: '#6d4aff', emoji: '🦊' };
 
@@ -24,6 +24,12 @@ describe('outgoing protocol version', () => {
       type: 'client:rejoin',
       protocolVersion: SUPPORTED_GAME_PROTOCOL_VERSION,
     });
+  });
+});
+
+describe('graceful host shutdown acknowledgement', () => {
+  it('echoes the shutdown identifiers back to the host', () => {
+    expect(createRoomClosedAcknowledgement('player-1', 'ABC234', 'shutdown-1', 'request-1')).toMatchObject({ type: 'client:room-closed-ack', gameId: 'ABC234', shutdownId: 'shutdown-1', playerId: 'player-1', senderId: 'player-1', requestId: 'request-1' });
   });
 });
 

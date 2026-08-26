@@ -3,6 +3,7 @@ import {
   MAX_MESSAGE_BYTES,
   MAX_SNAPSHOT_CHUNK_COUNT,
   SNAPSHOT_CHUNK_PAYLOAD_MAX_LENGTH,
+  REQUEST_ID_MAX_LENGTH,
   SUPPORTED_GAME_PROTOCOL_VERSION,
 } from './constants';
 import { encodedMessageSize } from './messageSize';
@@ -36,6 +37,10 @@ export function parseHostMessage(data: unknown): HostMessageParseResult {
       return typeof data.message === 'string' && (data.code === undefined || typeof data.code === 'string') ? ok({ type: data.type, message: data.message, ...(typeof data.code === 'string' ? { code: data.code } : {}), ...metadata }) : invalid();
     case 'host:heartbeat':
       return typeof data.gameId === 'string' && isInteger(data.sequenceNumber) ? ok({ type: data.type, gameId: data.gameId, sequenceNumber: data.sequenceNumber, ...metadata }) : invalid();
+    case 'host:room-closed':
+      return isBoundedString(data.gameId, REQUEST_ID_MAX_LENGTH) && isBoundedString(data.shutdownId, REQUEST_ID_MAX_LENGTH)
+        ? ok({ type: data.type, gameId: data.gameId, shutdownId: data.shutdownId, ...metadata })
+        : invalid();
     case 'host:lost':
       return typeof data.gameId === 'string' && typeof data.lostHostPlayerId === 'string' && isInteger(data.sequenceNumber) ? ok({ type: data.type, gameId: data.gameId, lostHostPlayerId: data.lostHostPlayerId, sequenceNumber: data.sequenceNumber, ...metadata }) : invalid();
     case 'host:migration-started':

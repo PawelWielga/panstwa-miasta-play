@@ -2,6 +2,7 @@ import { useApp } from './AppContext';
 import { JoinScreen } from '../features/connection/JoinScreen';
 import { ConnectingScreen } from '../features/connection/ConnectingScreen';
 import { ConnectionErrorScreen } from '../features/connection/ConnectionErrorScreen';
+import { HostEndedGameScreen } from '../features/connection/HostEndedGameScreen';
 import { LobbyScreen } from '../features/lobby/LobbyScreen';
 import { AnsweringScreen } from '../features/game/AnsweringScreen';
 import { TransitionScreen } from '../features/game/TransitionScreen';
@@ -11,6 +12,7 @@ import { ResultsScreen } from '../features/results/ResultsScreen';
 
 export function App() {
   const { state } = useApp();
+  if (state.hostClosedRoom) return <HostEndedGameScreen />;
   if (state.connectionStatus === 'idle' || state.connectionStatus === 'closed') return <JoinScreen />;
   if (state.connectionStatus === 'connecting' || state.connectionStatus === 'reconnecting') return <ConnectingScreen />;
   if (state.connectionStatus === 'error' || state.connectionStatus === 'lost') return <ConnectionErrorScreen />;

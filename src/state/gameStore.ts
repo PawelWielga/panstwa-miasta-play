@@ -36,6 +36,7 @@ export interface AppState {
   lastSeenSequenceNumber: number;
   gameId: string | null;
   notice: string | null;
+  hostClosedRoom: boolean;
 }
 
 export type AppAction =
@@ -49,7 +50,8 @@ export type AppAction =
   | { type: 'submitted'; value: boolean }
   | { type: 'ready'; value: boolean }
   | { type: 'wheel-spin-requested'; key: string }
-  | { type: 'clear-notice' };
+  | { type: 'clear-notice' }
+  | { type: 'return-to-main' };
 
 export function createInitialState(identity: PlayerIdentity, joinParameters: JoinParameters | null): AppState {
   return {
@@ -57,7 +59,7 @@ export function createInitialState(identity: PlayerIdentity, joinParameters: Joi
     categories: [], settings: null, hostControlsReview: true, currentLetter: null, deadlineAt: null,
     reviewSubmissions: [], reviewCategoryIndex: 0, revealResults: {}, roundScores: {}, finalScores: {},
     answers: {}, answersSubmitted: false, hasLocalAnswerDraft: false, localReady: false, pendingWheelSpinRequestKey: null,
-    lastHostActivityAt: 0, lastSeenSequenceNumber: 0, gameId: null, notice: null,
+    lastHostActivityAt: 0, lastSeenSequenceNumber: 0, gameId: null, notice: null, hostClosedRoom: false,
   };
 }
 
@@ -76,6 +78,7 @@ export function gameReducer(state: AppState, action: AppAction): AppState {
     case 'ready': return { ...state, localReady: action.value };
     case 'wheel-spin-requested': return { ...state, pendingWheelSpinRequestKey: action.key };
     case 'clear-notice': return { ...state, notice: null };
+    case 'return-to-main': return createInitialState(state.identity, null);
     case 'host-message': return reduceHostMessage(state, action.message, action.receivedAt);
   }
 }
@@ -88,6 +91,7 @@ function reduceHostMessage(state: AppState, message: HostMessage, receivedAt: nu
       ? { ...active, connectionStatus: 'error', connectionError: connectionFailureCodeForGameError(message.code), notice: null }
       : { ...active, notice: message.message };
     case 'host:heartbeat': return { ...active, gameId: message.gameId, lastSeenSequenceNumber: Math.max(state.lastSeenSequenceNumber, message.sequenceNumber) };
+    case 'host:room-closed': return { ...active, gameId: message.gameId, connectionStatus: 'closed', connectionError: null, notice: null, hostClosedRoom: true };
     case 'game:snapshot': return isStaleSnapshot(state, message.snapshot)
       ? active
       : applySnapshot(active, message.snapshot);

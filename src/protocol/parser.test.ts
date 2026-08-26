@@ -133,6 +133,17 @@ function bytesToBase64(bytes: Uint8Array): string {
   return globalThis.btoa(binary);
 }
 
+describe('graceful host shutdown', () => {
+  it('parses a valid host room close message', () => {
+    const result = parseHostMessage({ type: 'host:room-closed', gameId: 'ABC234', shutdownId: 'shutdown-1', requestId: 'shutdown-1' });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.message).toMatchObject({ type: 'host:room-closed', gameId: 'ABC234', shutdownId: 'shutdown-1' });
+  });
+  it('rejects a malformed host room close message', () => {
+    expect(parseHostMessage({ type: 'host:room-closed', gameId: 'ABC234' }).ok).toBe(false);
+  });
+});
+
 describe('parseHostMessage', () => {
   it('parses a valid snapshot', () => {
     const result = parseHostMessage({ type: 'game:snapshot', snapshot });
