@@ -41,11 +41,36 @@ type DataConnectionDetails = {
   peerConnection?: RTCPeerConnection;
 };
 
+type TimeoutPeerConnectionState = Pick<
+  RTCPeerConnection,
+  'signalingState' | 'iceConnectionState' | 'iceGatheringState'
+>;
+
 let generatedAttemptSequence = 0;
 
 function generateConnectionAttemptId(): string {
   generatedAttemptSequence += 1;
   return `web-${Date.now().toString(36)}-${generatedAttemptSequence.toString(36)}`;
+}
+
+export function classifyConnectTimeout(
+  peerConnection?: TimeoutPeerConnectionState,
+): ConnectionFailureCode {
+  if (peerConnection?.signalingState === 'stable'
+    && peerConnection.iceGatheringState === 'complete'
+    && (peerConnection.iceConnectionState === 'checking'
+      || peerConnection.iceConnectionState === 'failed'
+      || peerConnection.iceConnectionState === 'disconnected')) {
+    return connectionFailureCodes.p2pNetworkBlocked;
+  }
+  return connectionFailureCodes.connectionTimeout;
+}
+
+class PeerJsConnectTimeoutError extends Error {
+  constructor(readonly failureCode: ConnectionFailureCode) {
+    super('timeout');
+    this.name = 'PeerJsConnectTimeoutError';
+  }
 }
 
 export class PeerJsGameTransport implements GameTransport {
@@ -134,11 +159,20 @@ export class PeerJsGameTransport implements GameTransport {
         let challengeProcessing = false;
         let pendingReady: PeerJsBridgeReadyMessage | null = null;
         const timer = window.setTimeout(() => {
+          const peerConnection = connection
+            ? (connection as unknown as DataConnectionDetails).peerConnection
+            : undefined;
+          const failureCode = classifyConnectTimeout(peerConnection);
           recordConnectionDiagnostic('transport.connect.timeout', 'error', {
             connectionAttemptId,
             timeoutMs: CONNECT_TIMEOUT_MS,
+            failureCode,
+            connectionState: peerConnection?.connectionState ?? null,
+            iceConnectionState: peerConnection?.iceConnectionState ?? null,
+            iceGatheringState: peerConnection?.iceGatheringState ?? null,
+            signalingState: peerConnection?.signalingState ?? null,
           });
-          fail(new Error('timeout'));
+          fail(new PeerJsConnectTimeoutError(failureCode));
         }, CONNECT_TIMEOUT_MS);
         const finish = (action: () => void): void => {
           if (settled) return;
@@ -566,6 +600,7 @@ function shortPeerId(peerId: string): string {
 }
 
 export function mapPeerError(error: unknown): ConnectionFailureCode {
+  if (error instanceof PeerJsConnectTimeoutError) return error.failureCode;
   if (isHostVersionUnsupportedError(error)) return connectionFailureCodes.unsupportedVersion;
   if (isPeerJsAuthenticationError(error)) {
     return error.reason === 'host-session-mismatch'
