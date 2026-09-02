@@ -61,11 +61,11 @@ const guidanceByCode: Record<ConnectionFailureCode, ConnectionFailureGuidance> =
     hint: 'Do trwającej rozgrywki nie można dołączyć jak do nowego pokoju.',
   },
   [connectionFailureCodes.connectionTimeout]: {
-    title: 'Ta sieć może blokować grę',
-    message: 'Nie udało się nawiązać bezpośredniego połączenia z prowadzącym. Ta sieć może blokować grę przez internet.',
-    primaryAction: 'changeNetwork',
-    actionLabel: 'Wróć i zmień sieć',
-    hint: 'Spróbuj innej sieci Wi‑Fi, internetu komórkowego albo wyłącz VPN. Potem wpisz ponownie ten sam kod pokoju.',
+    title: 'Połączenie trwa zbyt długo',
+    message: 'Prowadzący nie odpowiedział na czas. Sprawdź, czy pokój nadal jest dostępny, i spróbuj ponownie.',
+    primaryAction: 'retry',
+    actionLabel: 'Spróbuj ponownie',
+    hint: 'Jeśli problem się powtarza, poproś prowadzącego o ponowne udostępnienie pokoju.',
   },
   [connectionFailureCodes.p2pNetworkBlocked]: {
     title: 'Ta sieć blokuje grę',
