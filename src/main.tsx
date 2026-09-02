@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { AppProvider } from './app/AppContext';
 import './styles.css';
+import './native-parity.css';
 
 const rootElement = document.getElementById('root');
 if (rootElement === null) throw new Error('Brak elementu #root.');
