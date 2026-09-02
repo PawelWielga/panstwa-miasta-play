@@ -41,21 +41,25 @@ it('asks for the code again when the invitation is invalid', async () => {
   expect(mocked.value.actions.retry).not.toHaveBeenCalled();
 });
 
-it('maps a timeout to retry with the same room code', async () => {
+it('treats a direct-connection timeout as a likely blocked network', async () => {
   mocked.value = createValue(connectionFailureCodes.connectionTimeout);
   render(<ConnectionErrorScreen />);
 
-  expect(screen.getByText('Połączenie trwało zbyt długo. Sprawdź sieć i spróbuj ponownie.')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: 'Spróbuj ponownie' }));
-  expect(mocked.value.actions.retry).toHaveBeenCalled();
+  expect(screen.getByRole('heading', { name: 'Ta sieć może blokować grę' })).toBeInTheDocument();
+  expect(screen.getByText('Nie udało się nawiązać bezpośredniego połączenia z prowadzącym. Ta sieć może blokować grę przez internet.')).toBeInTheDocument();
+  expect(screen.getByText('Spróbuj innej sieci Wi‑Fi, internetu komórkowego albo wyłącz VPN. Potem wpisz ponownie ten sam kod pokoju.')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Wróć i zmień sieć' }));
+  expect(mocked.value.actions.cancel).toHaveBeenCalled();
+  expect(mocked.value.actions.retry).not.toHaveBeenCalled();
 });
 
 it('maps blocked P2P to the change-network recovery', async () => {
   mocked.value = createValue(connectionFailureCodes.p2pNetworkBlocked);
   render(<ConnectionErrorScreen />);
 
-  expect(screen.getByText('Nie udało się połączyć przez tę sieć. Zmień Wi‑Fi, wyłącz VPN albo użyj hotspotu lub gry lokalnej.')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: 'Użyj innej sieci' }));
+  expect(screen.getByRole('heading', { name: 'Ta sieć blokuje grę' })).toBeInTheDocument();
+  expect(screen.getByText('Nie udało się nawiązać bezpośredniego połączenia z prowadzącym. Ta sieć blokuje grę przez internet.')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Wróć i zmień sieć' }));
   expect(mocked.value.actions.cancel).toHaveBeenCalled();
   expect(mocked.value.actions.retry).not.toHaveBeenCalled();
 });
