@@ -7,7 +7,7 @@ const labels = {
 } as const;
 export function ConnectionBanner() {
   const { state, actions } = useApp();
-  if (state.connectionStatus === 'idle') return null;
+  if (state.connectionStatus === 'idle' || state.connectionStatus === 'connected') return null;
   const guidance = state.connectionError ? getConnectionFailureGuidance(state.connectionError) : null;
   const canRetry = ['lost', 'error', 'closed'].includes(state.connectionStatus)
     && (guidance?.primaryAction ?? 'retry') === 'retry';
