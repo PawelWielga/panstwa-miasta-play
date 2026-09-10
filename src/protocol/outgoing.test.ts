@@ -7,7 +7,7 @@ import {
   REQUEST_ID_MAX_LENGTH,
   SUPPORTED_GAME_PROTOCOL_VERSION,
 } from './constants';
-import { createFinalizationSubmit, createPlayerHello, createRejoin, createRoomClosedAcknowledgement, createStartWheelSpin, createSubmit, createWheelSpinHoldStarted } from './outgoing';
+import { createClientLeave, createFinalizationSubmit, createPlayerHello, createRejoin, createRoomClosedAcknowledgement, createStartWheelSpin, createSubmit, createWheelSpinHoldStarted } from './outgoing';
 
 const profile = { id: 'player-1', name: 'Ala', color: '#6d4aff', emoji: '🦊' };
 
@@ -30,6 +30,19 @@ describe('outgoing protocol version', () => {
 describe('graceful host shutdown acknowledgement', () => {
   it('echoes the shutdown identifiers back to the host', () => {
     expect(createRoomClosedAcknowledgement('player-1', 'ABC234', 'shutdown-1', 'request-1')).toMatchObject({ type: 'client:room-closed-ack', gameId: 'ABC234', shutdownId: 'shutdown-1', playerId: 'player-1', senderId: 'player-1', requestId: 'request-1' });
+  });
+});
+
+describe('explicit client leave', () => {
+  it('binds the leave intent to the current room, host session and player', () => {
+    expect(createClientLeave('player-1', 'ABC123', 'SESSION123')).toMatchObject({
+      type: 'client:leave',
+      roomId: 'ABC123',
+      hostSessionId: 'SESSION123',
+      playerId: 'player-1',
+      senderId: 'player-1',
+    });
+    expect(createClientLeave('player-1', 'ABC123', 'SESSION123')).toHaveProperty('requestId');
   });
 });
 

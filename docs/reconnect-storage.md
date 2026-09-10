@@ -37,3 +37,7 @@ Brak `localStorage` nie może blokować zwykłego dołączenia. W takim przypadk
 - Trwałe odrzucenie readmission, niezgodna sesja hosta albo nieprawidłowe uwierzytelnienie usuwa rekord.
 - Błędy przejściowe, utrata sieci, uśpienie Safari i timeout nie usuwają rekordu.
 - Pełne odpowiedzi gracza nie są zapisywane w tej wersji. Po readmission hostowy snapshot odtwarza odpowiedzi już wysłane; lokalny niewysłany draft może zniknąć po zamknięciu karty.
+
+## Świadome opuszczenie gry
+
+Akcja „Opuść grę” usuwa zapis niedokończonej sesji tylko dla aktualnego pokoju i gracza, czyści draft bieżącej rundy i zamyka transport po best-effort `client:leave`. Trwała tożsamość gracza pozostaje zachowana. Zwykły reload, `pagehide`, przejście Safari w tło, utrata sieci lub DataChannel nie wykonują tego cleanupu, dzięki czemu „Wróć” nadal może wznowić przerwaną sesję.

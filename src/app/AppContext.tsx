@@ -20,7 +20,7 @@ import { isHostVersionUnsupportedError } from '../config/hostCompatibility';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
 import { isTerminalJoinError } from '../protocol/gameErrors';
 import { connectionFailureCodes } from '../protocol/connectionFailure';
-import { createEditAnswers, createFinalizationSubmit, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createRoomClosedAcknowledgement, createStartWheelSpin, createSubmit, createWheelSpinHoldCancelled, createWheelSpinHoldStarted } from '../protocol/outgoing';
+import { createClientLeave, createEditAnswers, createFinalizationSubmit, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createRoomClosedAcknowledgement, createStartWheelSpin, createSubmit, createWheelSpinHoldCancelled, createWheelSpinHoldStarted } from '../protocol/outgoing';
 import type { ClientMessage, CountriesCitiesWheelState, GameSnapshot, HostMessage } from '../protocol/messages';
 import { wheelSpinRequestKey } from '../protocol/wheel';
 import { isPeerJsAuthenticationError, PeerJsGameTransport } from '../peer/PeerJsGameTransport';
@@ -50,6 +50,7 @@ export interface AppActions {
   connect: (parameters: JoinParameters, resumeSession?: UnfinishedMultiplayerSession) => Promise<void>;
   cancel: () => void;
   returnToMain: () => void;
+  leaveGame: () => void;
   retry: () => void;
   toggleReady: () => void;
   startWheelSpinHold: () => void;
@@ -694,6 +695,46 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     dispatch({ type: 'return-to-main' });
   }, [cancel]);
 
+  const leaveGame = useCallback((): void => {
+    const currentState = stateRef.current;
+    const target = currentState.joinParameters;
+    const transport = transportRef.current;
+    const current = reconnectRef.current;
+
+    current.manuallyClosed = true;
+    current.terminalJoinRejected = false;
+    current.startedAt = 0;
+    current.attempt = 0;
+    window.clearTimeout(current.timer);
+    current.timer = 0;
+    connectionAttemptRef.current.currentId = null;
+    connectionAttemptRef.current.inFlight = null;
+    transportRef.current = null;
+
+    if (transport && target) {
+      try {
+        transport.send(createClientLeave(
+          currentState.identity.playerId,
+          target.roomId,
+          target.hostSessionId,
+        ));
+        recordConnectionDiagnostic('client-leave.sent', 'info', { roomId: target.roomId });
+      } catch (error) {
+        recordConnectionDiagnostic('client-leave.send.failed', 'warning', {
+          roomId: target.roomId,
+          ...getDiagnosticErrorDetails(error),
+        });
+      }
+    }
+
+    clearAnswerDraftForState(currentState);
+    removeCurrentUnfinishedSession();
+    wheelSpinHoldRef.current = null;
+    transport?.close();
+    stateRef.current = createInitialState(currentState.identity, null);
+    dispatch({ type: 'return-to-main' });
+  }, [clearAnswerDraftForState, removeCurrentUnfinishedSession]);
+
   const retry = useCallback((): void => {
     const parameters = stateRef.current.joinParameters;
     if (reconnectRef.current.terminalJoinRejected) {
@@ -821,6 +862,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     connect,
     cancel,
     returnToMain,
+    leaveGame,
     retry,
     toggleReady: () => {
       const next = !stateRef.current.localReady;
@@ -893,7 +935,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       dispatch({ type: 'submitted', value: false });
     },
     clearNotice: () => dispatch({ type: 'clear-notice' }),
-  }), [cancel, connect, flushCurrentAnswerDraft, retry, returnToMain, send, updateIdentityAction]);
+  }), [cancel, connect, flushCurrentAnswerDraft, leaveGame, retry, returnToMain, send, updateIdentityAction]);
 
   return <AppContext.Provider value={{ state, actions }}>{children}</AppContext.Provider>;
 }
