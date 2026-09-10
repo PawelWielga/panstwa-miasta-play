@@ -41,3 +41,5 @@ Brak `localStorage` nie może blokować zwykłego dołączenia. W takim przypadk
 ## Świadome opuszczenie gry
 
 Akcja „Opuść grę” usuwa zapis niedokończonej sesji tylko dla aktualnego pokoju i gracza, czyści draft bieżącej rundy i zamyka transport po best-effort `client:leave`. Trwała tożsamość gracza pozostaje zachowana. Zwykły reload, `pagehide`, przejście Safari w tło, utrata sieci lub DataChannel nie wykonują tego cleanupu, dzięki czemu „Wróć” nadal może wznowić przerwaną sesję.
+
+Cleanup świadomego wyjścia jest idempotentny: ponowne wywołanie po przejściu do ekranu dołączania nie wysyła kolejnego `client:leave` i nie uruchamia reconnectu.
