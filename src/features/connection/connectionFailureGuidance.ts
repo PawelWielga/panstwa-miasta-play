@@ -1,4 +1,4 @@
-import { connectionFailureCodes, type ConnectionFailureCode } from '../../protocol/connectionFailure';
+import { connectionFailureCodes, localConnectionFailureCodes, type ConnectionFailureCode } from '../../protocol/connectionFailure';
 
 export type ConnectionRecoveryAction = 'retry' | 'editConnection' | 'changeNetwork' | 'backToMenu';
 
@@ -88,7 +88,7 @@ const guidanceByCode: Record<ConnectionFailureCode, ConnectionFailureGuidance> =
     actionLabel: 'Spróbuj ponownie',
     hint: 'Ponowienie spróbuje odzyskać połączenie z tym samym pokojem.',
   },
-  [connectionFailureCodes.sessionInUse]: {
+  [localConnectionFailureCodes.sessionInUse]: {
     title: 'Gra jest otwarta w innej karcie',
     message: 'Ta sama sesja gracza jest już aktywna w innej karcie tej przeglądarki.',
     primaryAction: 'retry',
