@@ -19,7 +19,7 @@ import {
 import { isHostVersionUnsupportedError } from '../config/hostCompatibility';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
 import { isTerminalJoinError } from '../protocol/gameErrors';
-import { connectionFailureCodes } from '../protocol/connectionFailure';
+import { connectionFailureCodes, localConnectionFailureCodes } from '../protocol/connectionFailure';
 import { createClientLeave, createEditAnswers, createFinalizationSubmit, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createRoomClosedAcknowledgement, createStartWheelSpin, createSubmit, createWheelSpinHoldCancelled, createWheelSpinHoldStarted } from '../protocol/outgoing';
 import type { ClientMessage, CountriesCitiesWheelState, GameSnapshot, HostMessage } from '../protocol/messages';
 import { wheelSpinRequestKey } from '../protocol/wheel';
@@ -354,7 +354,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     transportRef.current = null;
     transport?.close();
     recordConnectionDiagnostic('session-tab-lease.lost', 'warning');
-    dispatch({ type: 'connection', status: 'error', error: connectionFailureCodes.sessionInUse });
+    dispatch({ type: 'connection', status: 'error', error: localConnectionFailureCodes.sessionInUse });
   }, []);
 
   const ensureSessionLease = useCallback((parameters: JoinParameters): boolean => {
@@ -368,10 +368,10 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         ...stateRef.current,
         joinParameters: parameters,
         connectionStatus: 'error',
-        connectionError: connectionFailureCodes.sessionInUse,
+        connectionError: localConnectionFailureCodes.sessionInUse,
       };
       dispatch({ type: 'join-parameters', parameters });
-      dispatch({ type: 'connection', status: 'error', error: connectionFailureCodes.sessionInUse });
+      dispatch({ type: 'connection', status: 'error', error: localConnectionFailureCodes.sessionInUse });
     }
     return false;
   }, [acquireSessionLease, handleSessionLeaseLost]);
