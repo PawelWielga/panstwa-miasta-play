@@ -327,9 +327,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     });
 
     if (current?.storageKey === candidate.storageKey) {
-      if (current.renew()) return true;
-      sessionLeaseRef.current = null;
-      return false;
+      return current.renew();
     }
 
     if (!candidate.acquire()) return false;
@@ -358,6 +356,25 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     recordConnectionDiagnostic('session-tab-lease.lost', 'warning');
     dispatch({ type: 'connection', status: 'error', error: connectionFailureCodes.sessionInUse });
   }, []);
+
+  const ensureSessionLease = useCallback((parameters: JoinParameters): boolean => {
+    if (acquireSessionLease(parameters, stateRef.current.identity.playerId)) return true;
+
+    recordConnectionDiagnostic('session-tab-lease.blocked', 'warning', getConnectionRuntimeDetails(parameters.roomId));
+    if (sessionLeaseRef.current) {
+      handleSessionLeaseLost();
+    } else {
+      stateRef.current = {
+        ...stateRef.current,
+        joinParameters: parameters,
+        connectionStatus: 'error',
+        connectionError: connectionFailureCodes.sessionInUse,
+      };
+      dispatch({ type: 'join-parameters', parameters });
+      dispatch({ type: 'connection', status: 'error', error: connectionFailureCodes.sessionInUse });
+    }
+    return false;
+  }, [acquireSessionLease, handleSessionLeaseLost]);
 
   const handleMessage = useCallback((message: HostMessage): void => {
     const receivedAt = Date.now();
@@ -512,6 +529,8 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       return existingAttempt;
     }
 
+    if (!ensureSessionLease(parameters)) return Promise.resolve();
+
     const current = reconnectRef.current;
     current.manuallyClosed = false;
     window.clearTimeout(current.timer);
@@ -657,7 +676,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     })();
     connectionAttemptRef.current.inFlight = attemptPromise;
     return attemptPromise;
-  }, [handleMessage, onTransportState, releaseSessionLease, removeCurrentUnfinishedSession, scheduleReconnect]);
+  }, [ensureSessionLease, handleMessage, onTransportState, releaseSessionLease, removeCurrentUnfinishedSession, scheduleReconnect]);
 
   useEffect(() => {
     connectInternalRef.current = connectInternal;
@@ -714,18 +733,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       });
     }
 
-    if (!acquireSessionLease(parameters, stateRef.current.identity.playerId)) {
-      recordConnectionDiagnostic('session-tab-lease.blocked', 'warning', getConnectionRuntimeDetails(parameters.roomId));
-      stateRef.current = {
-        ...stateRef.current,
-        joinParameters: parameters,
-        connectionStatus: 'error',
-        connectionError: connectionFailureCodes.sessionInUse,
-      };
-      dispatch({ type: 'join-parameters', parameters });
-      dispatch({ type: 'connection', status: 'error', error: connectionFailureCodes.sessionInUse });
-      return Promise.resolve();
-    }
+    if (!ensureSessionLease(parameters)) return Promise.resolve();
 
     const current = reconnectRef.current;
     window.clearTimeout(current.timer);
@@ -739,7 +747,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     transportRef.current?.close();
     transportRef.current = null;
     return connectInternal(parameters, resumingStoredSession);
-  }, [acquireSessionLease, clearAnswerDraftForState, connectInternal]);
+  }, [clearAnswerDraftForState, connectInternal, ensureSessionLease]);
 
   const cancel = useCallback((): void => {
     recordConnectionDiagnostic('connection.cancelled-by-user', 'info', {
@@ -827,11 +835,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       });
       return;
     }
-    if (!acquireSessionLease(parameters, stateRef.current.identity.playerId)) {
-      recordConnectionDiagnostic('session-tab-lease.retry-blocked', 'warning', getConnectionRuntimeDetails(parameters.roomId));
-      dispatch({ type: 'connection', status: 'error', error: connectionFailureCodes.sessionInUse });
-      return;
-    }
+    if (!ensureSessionLease(parameters)) return;
     recordConnectionDiagnostic('connection.retry.requested', 'warning', getConnectionRuntimeDetails(parameters.roomId));
     const current = reconnectRef.current;
     window.clearTimeout(current.timer);
@@ -840,7 +844,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     current.attempt = 0;
     current.manuallyClosed = false;
     void connectInternal(parameters, true);
-  }, [acquireSessionLease, connectInternal]);
+  }, [connectInternal, ensureSessionLease]);
 
   useEffect(() => {
     const verifyLease = (): void => {
