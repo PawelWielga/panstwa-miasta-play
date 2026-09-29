@@ -11,6 +11,14 @@ describe('PeerJsGameTransport timeout classification', () => {
     })).toBe(connectionFailureCodes.p2pNetworkBlocked);
   });
 
+  it('does not wait for ICE gathering to finish once SDP is stable and ICE is stuck', () => {
+    expect(classifyConnectTimeout({
+      signalingState: 'stable',
+      iceConnectionState: 'checking',
+      iceGatheringState: 'gathering',
+    })).toBe(connectionFailureCodes.p2pNetworkBlocked);
+  });
+
   it('keeps a timeout before a remote SDP answer as a generic timeout', () => {
     expect(classifyConnectTimeout({
       signalingState: 'have-local-offer',
