@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HostVersionUnsupportedError } from '../config/hostCompatibility';
 import type { ClientMessage, GameSnapshot, HostMessage } from '../protocol/messages';
-import { connectionFailureCodeForGameError, connectionFailureCodes } from '../protocol/connectionFailure';
+import { connectionFailureCodeForGameError, connectionFailureCodes, localConnectionFailureCodes } from '../protocol/connectionFailure';
 import type { JoinParameters } from '../features/connection/joinParams';
 import { joinParameters } from '../test/fixtures';
 import type {
@@ -507,7 +507,7 @@ describe('AppProvider connection lifecycle', () => {
 
     expect(transports).toHaveLength(0);
     expect(currentState.connectionStatus).toBe('error');
-    expect(currentState.connectionError).toBe(connectionFailureCodes.sessionInUse);
+    expect(currentState.connectionError).toBe(localConnectionFailureCodes.sessionInUse);
 
     otherTabLease.release();
     act(() => { actions.retry(); });
@@ -548,7 +548,7 @@ describe('AppProvider connection lifecycle', () => {
     expect(transports).toHaveLength(1);
     expect(getTransport(transports, 0).close).toHaveBeenCalled();
     expect(currentState.connectionStatus).toBe('error');
-    expect(currentState.connectionError).toBe(connectionFailureCodes.sessionInUse);
+    expect(currentState.connectionError).toBe(localConnectionFailureCodes.sessionInUse);
   });
 
   it('freezes the current draft and reuses the same tagged submit for repeated finalization snapshots', async () => {
