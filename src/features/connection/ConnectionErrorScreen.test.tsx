@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ConnectionErrorScreen } from './ConnectionErrorScreen';
-import { connectionFailureCodes, type ConnectionFailureCode } from '../../protocol/connectionFailure';
+import { connectionFailureCodes, localConnectionFailureCodes, type ConnectionFailureCode } from '../../protocol/connectionFailure';
 import { appActions, appState } from '../../test/fixtures';
 import { clearConnectionDiagnostics, recordConnectionDiagnostic } from '../../diagnostics/connectionDiagnostics';
 
@@ -91,7 +91,7 @@ it('maps an exhausted reconnect to retry without leaking the raw diagnostic', as
 });
 
 it('explains that the same player session is active in another tab', async () => {
-  mocked.value = createValue(connectionFailureCodes.sessionInUse);
+  mocked.value = createValue(localConnectionFailureCodes.sessionInUse);
   render(<ConnectionErrorScreen />);
 
   expect(screen.getByRole('heading', { name: 'Gra jest otwarta w innej karcie' })).toBeInTheDocument();
