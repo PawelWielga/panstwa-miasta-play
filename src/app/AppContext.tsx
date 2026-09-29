@@ -661,7 +661,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
 
   useEffect(() => {
     connectInternalRef.current = connectInternal;
-  }, [acquireSessionLease, connectInternal]);
+  }, [connectInternal]);
 
   const connect = useCallback((parameters: JoinParameters, resumeSession?: UnfinishedMultiplayerSession): Promise<void> => {
     const existingAttempt = connectionAttemptRef.current.inFlight;
@@ -840,7 +840,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     current.attempt = 0;
     current.manuallyClosed = false;
     void connectInternal(parameters, true);
-  }, [connectInternal]);
+  }, [acquireSessionLease, connectInternal]);
 
   useEffect(() => {
     const verifyLease = (): void => {
