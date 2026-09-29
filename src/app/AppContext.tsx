@@ -19,7 +19,7 @@ import {
 import { isHostVersionUnsupportedError } from '../config/hostCompatibility';
 import { HEARTBEAT_INTERVAL_MS, HOST_TIMEOUT_MS } from '../protocol/constants';
 import { isTerminalJoinError } from '../protocol/gameErrors';
-import { connectionFailureCodes } from '../protocol/connectionFailure';
+import { connectionFailureCodes, localConnectionFailureCodes } from '../protocol/connectionFailure';
 import { createClientLeave, createEditAnswers, createFinalizationSubmit, createGameReady, createHeartbeat, createPlayerHello, createRejoin, createRoomClosedAcknowledgement, createStartWheelSpin, createSubmit, createWheelSpinHoldCancelled, createWheelSpinHoldStarted } from '../protocol/outgoing';
 import type { ClientMessage, CountriesCitiesWheelState, GameSnapshot, HostMessage } from '../protocol/messages';
 import { wheelSpinRequestKey } from '../protocol/wheel';
@@ -41,6 +41,11 @@ import {
   type AnswerDraftScope,
   type FrozenFinalizationResponse,
 } from '../storage/answerDraftStorage';
+import {
+  createSessionTabLease,
+  sessionTabLeaseHeartbeatMs,
+  type SessionTabLease,
+} from '../storage/sessionTabLease';
 
 const UNFINISHED_SESSION_REFRESH_INTERVAL_MS = 60_000;
 const ANSWER_DRAFT_DEBOUNCE_MS = 200;
@@ -71,6 +76,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
   const [state, dispatch] = useReducer(gameReducer, createInitialState(initialIdentity, null));
   const stateRef = useRef(state);
   const transportRef = useRef<GameTransport | null>(null);
+  const sessionLeaseRef = useRef<SessionTabLease | null>(null);
   const reconnectRef = useRef({
     startedAt: 0,
     attempt: 0,
@@ -306,6 +312,70 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     );
   }, []);
 
+  const releaseSessionLease = useCallback((): void => {
+    const lease = sessionLeaseRef.current;
+    sessionLeaseRef.current = null;
+    lease?.release();
+  }, []);
+
+  const acquireSessionLease = useCallback((parameters: JoinParameters, playerId: string): boolean => {
+    const current = sessionLeaseRef.current;
+    const candidate = createSessionTabLease({
+      roomId: parameters.roomId,
+      hostSessionId: parameters.hostSessionId,
+      playerId,
+    });
+
+    if (current?.storageKey === candidate.storageKey) {
+      return current.renew();
+    }
+
+    if (!candidate.acquire()) return false;
+    current?.release();
+    sessionLeaseRef.current = candidate;
+    return true;
+  }, []);
+
+  const handleSessionLeaseLost = useCallback((): void => {
+    const lease = sessionLeaseRef.current;
+    if (!lease) return;
+    sessionLeaseRef.current = null;
+
+    const current = reconnectRef.current;
+    current.manuallyClosed = true;
+    current.startedAt = 0;
+    current.attempt = 0;
+    window.clearTimeout(current.timer);
+    current.timer = 0;
+    connectionAttemptRef.current.currentId = null;
+    connectionAttemptRef.current.inFlight = null;
+
+    const transport = transportRef.current;
+    transportRef.current = null;
+    transport?.close();
+    recordConnectionDiagnostic('session-tab-lease.lost', 'warning');
+    dispatch({ type: 'connection', status: 'error', error: localConnectionFailureCodes.sessionInUse });
+  }, []);
+
+  const ensureSessionLease = useCallback((parameters: JoinParameters): boolean => {
+    if (acquireSessionLease(parameters, stateRef.current.identity.playerId)) return true;
+
+    recordConnectionDiagnostic('session-tab-lease.blocked', 'warning', getConnectionRuntimeDetails(parameters.roomId));
+    if (sessionLeaseRef.current) {
+      handleSessionLeaseLost();
+    } else {
+      stateRef.current = {
+        ...stateRef.current,
+        joinParameters: parameters,
+        connectionStatus: 'error',
+        connectionError: localConnectionFailureCodes.sessionInUse,
+      };
+      dispatch({ type: 'join-parameters', parameters });
+      dispatch({ type: 'connection', status: 'error', error: localConnectionFailureCodes.sessionInUse });
+    }
+    return false;
+  }, [acquireSessionLease, handleSessionLeaseLost]);
+
   const handleMessage = useCallback((message: HostMessage): void => {
     const receivedAt = Date.now();
     if (message.type === 'host:room-closed') {
@@ -314,6 +384,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       current.terminalJoinRejected = false;
       window.clearTimeout(current.timer);
       current.timer = 0;
+      releaseSessionLease();
       clearAnswerDraftForState(stateRef.current);
       removeCurrentUnfinishedSession();
       send(createRoomClosedAcknowledgement(
@@ -347,6 +418,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       current.terminalJoinRejected = true;
       window.clearTimeout(current.timer);
       current.timer = 0;
+      releaseSessionLease();
       removeCurrentUnfinishedSession();
       recordConnectionDiagnostic('join.rejected', 'warning', { code: message.code });
       transportRef.current?.close();
@@ -363,7 +435,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     }
     dispatch({ type: 'host-message', message, receivedAt });
     if (restoredAnswers) dispatch({ type: 'restore-draft', answers: restoredAnswers });
-  }, [clearAnswerDraftForState, handleSnapshotAnswerLifecycle, persistCurrentUnfinishedSession, removeCurrentUnfinishedSession, send]);
+  }, [clearAnswerDraftForState, handleSnapshotAnswerLifecycle, persistCurrentUnfinishedSession, releaseSessionLease, removeCurrentUnfinishedSession, send]);
 
   const scheduleReconnect = useCallback((): void => {
     const current = reconnectRef.current;
@@ -456,6 +528,8 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       });
       return existingAttempt;
     }
+
+    if (!ensureSessionLease(parameters)) return Promise.resolve();
 
     const current = reconnectRef.current;
     current.manuallyClosed = false;
@@ -589,6 +663,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         if (permanentFailure) {
           window.clearTimeout(current.timer);
           current.timer = 0;
+          releaseSessionLease();
           removeCurrentUnfinishedSession();
         }
         shouldReconnect = !permanentFailure;
@@ -601,7 +676,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     })();
     connectionAttemptRef.current.inFlight = attemptPromise;
     return attemptPromise;
-  }, [handleMessage, onTransportState, removeCurrentUnfinishedSession, scheduleReconnect]);
+  }, [ensureSessionLease, handleMessage, onTransportState, releaseSessionLease, removeCurrentUnfinishedSession, scheduleReconnect]);
 
   useEffect(() => {
     connectInternalRef.current = connectInternal;
@@ -658,6 +733,8 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       });
     }
 
+    if (!ensureSessionLease(parameters)) return Promise.resolve();
+
     const current = reconnectRef.current;
     window.clearTimeout(current.timer);
     current.startedAt = 0;
@@ -670,7 +747,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     transportRef.current?.close();
     transportRef.current = null;
     return connectInternal(parameters, resumingStoredSession);
-  }, [clearAnswerDraftForState, connectInternal]);
+  }, [clearAnswerDraftForState, connectInternal, ensureSessionLease]);
 
   const cancel = useCallback((): void => {
     recordConnectionDiagnostic('connection.cancelled-by-user', 'info', {
@@ -686,8 +763,9 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     const transport = transportRef.current;
     transportRef.current = null;
     transport?.close();
+    releaseSessionLease();
     dispatch({ type: 'connection', status: 'closed' });
-  }, []);
+  }, [releaseSessionLease]);
 
   const returnToMain = useCallback((): void => {
     cancel();
@@ -731,9 +809,10 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     removeCurrentUnfinishedSession();
     wheelSpinHoldRef.current = null;
     transport?.close();
+    releaseSessionLease();
     stateRef.current = createInitialState(currentState.identity, null);
     dispatch({ type: 'return-to-main' });
-  }, [clearAnswerDraftForState, removeCurrentUnfinishedSession]);
+  }, [clearAnswerDraftForState, releaseSessionLease, removeCurrentUnfinishedSession]);
 
   const retry = useCallback((): void => {
     const parameters = stateRef.current.joinParameters;
@@ -756,6 +835,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       });
       return;
     }
+    if (!ensureSessionLease(parameters)) return;
     recordConnectionDiagnostic('connection.retry.requested', 'warning', getConnectionRuntimeDetails(parameters.roomId));
     const current = reconnectRef.current;
     window.clearTimeout(current.timer);
@@ -764,7 +844,25 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     current.attempt = 0;
     current.manuallyClosed = false;
     void connectInternal(parameters, true);
-  }, [connectInternal]);
+  }, [connectInternal, ensureSessionLease]);
+
+  useEffect(() => {
+    const verifyLease = (): void => {
+      const lease = sessionLeaseRef.current;
+      if (lease && !lease.renew()) handleSessionLeaseLost();
+    };
+    const handleStorage = (event: StorageEvent): void => {
+      const lease = sessionLeaseRef.current;
+      if (lease && event.key === lease.storageKey && !lease.isOwner()) handleSessionLeaseLost();
+    };
+
+    const timer = window.setInterval(verifyLease, sessionTabLeaseHeartbeatMs);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [handleSessionLeaseLost]);
 
   useEffect(() => {
     window.clearTimeout(answerDraftTimerRef.current);
@@ -839,6 +937,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
 
   useEffect(() => () => {
     flushCurrentAnswerDraft();
+    releaseSessionLease();
     reconnectRef.current.manuallyClosed = true;
     window.clearTimeout(reconnectRef.current.timer);
     reconnectRef.current.timer = 0;
@@ -847,7 +946,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     const transport = transportRef.current;
     transportRef.current = null;
     transport?.close();
-  }, [flushCurrentAnswerDraft]);
+  }, [flushCurrentAnswerDraft, releaseSessionLease]);
 
   const updateIdentityAction = useCallback((values: Pick<StoredPlayerIdentity, 'playerName' | 'playerEmoji' | 'playerColor'>): PlayerIdentity => {
     const identity = updatePlayerIdentity(stateRef.current.identity, values);

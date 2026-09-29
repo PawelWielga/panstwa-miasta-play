@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ConnectionErrorScreen } from './ConnectionErrorScreen';
-import { connectionFailureCodes, type ConnectionFailureCode } from '../../protocol/connectionFailure';
+import { connectionFailureCodes, localConnectionFailureCodes, type ConnectionFailureCode } from '../../protocol/connectionFailure';
 import { appActions, appState } from '../../test/fixtures';
 import { clearConnectionDiagnostics, recordConnectionDiagnostic } from '../../diagnostics/connectionDiagnostics';
 
@@ -88,6 +88,17 @@ it('maps an exhausted reconnect to retry without leaking the raw diagnostic', as
   expect(screen.getByText('Połączenie zostało przerwane. Spróbuj ponownie.')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Spróbuj ponownie' }));
   expect(mocked.value.actions.retry).toHaveBeenCalled();
+});
+
+it('explains that the same player session is active in another tab', async () => {
+  mocked.value = createValue(localConnectionFailureCodes.sessionInUse);
+  render(<ConnectionErrorScreen />);
+
+  expect(screen.getByRole('heading', { name: 'Gra jest otwarta w innej karcie' })).toBeInTheDocument();
+  expect(screen.getByText('Ta sama sesja gracza jest już aktywna w innej karcie tej przeglądarki.')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Spróbuj ponownie' }));
+  expect(mocked.value.actions.retry).toHaveBeenCalled();
+  expect(mocked.value.actions.cancel).not.toHaveBeenCalled();
 });
 
 it('falls back to safe generic copy for an unknown technical error', () => {

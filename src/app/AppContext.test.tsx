@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HostVersionUnsupportedError } from '../config/hostCompatibility';
 import type { ClientMessage, GameSnapshot, HostMessage } from '../protocol/messages';
-import { connectionFailureCodeForGameError, connectionFailureCodes } from '../protocol/connectionFailure';
+import { connectionFailureCodeForGameError, connectionFailureCodes, localConnectionFailureCodes } from '../protocol/connectionFailure';
 import type { JoinParameters } from '../features/connection/joinParams';
 import { joinParameters } from '../test/fixtures';
 import type {
@@ -17,6 +17,7 @@ import {
   readLatestUnfinishedMultiplayerSession,
   saveUnfinishedMultiplayerSession,
 } from '../storage/unfinishedMultiplayerSessionStorage';
+import { createSessionTabLease, sessionTabLeaseStorageKey } from '../storage/sessionTabLease';
 import { AppProvider, useApp, type AppActions } from './AppContext';
 
 class DeferredTransport implements GameTransport {
@@ -483,6 +484,71 @@ describe('AppProvider connection lifecycle', () => {
       2,
       expect.objectContaining({ type: 'client:rejoin' }),
     );
+  });
+
+  it('blocks a second tab from using the same player session and allows retry after release', async () => {
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+
+    const otherTabLease = createSessionTabLease({
+      roomId: joinParameters.roomId,
+      hostSessionId: joinParameters.hostSessionId,
+      playerId: currentState.identity.playerId,
+    }, { ownerId: 'other-tab' });
+    expect(otherTabLease.acquire()).toBe(true);
+
+    await act(async () => {
+      await actions.connect(joinParameters);
+    });
+
+    expect(transports).toHaveLength(0);
+    expect(currentState.connectionStatus).toBe('error');
+    expect(currentState.connectionError).toBe(localConnectionFailureCodes.sessionInUse);
+
+    otherTabLease.release();
+    act(() => { actions.retry(); });
+
+    expect(transports).toHaveLength(1);
+    expect(getTransport(transports, 0).connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not auto-reconnect after another tab takes the active lease', async () => {
+    vi.useFakeTimers();
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+
+    const leaseKey = sessionTabLeaseStorageKey({
+      roomId: joinParameters.roomId,
+      hostSessionId: joinParameters.hostSessionId,
+      playerId: currentState.identity.playerId,
+    });
+    window.localStorage.setItem(leaseKey, JSON.stringify({
+      ownerId: 'other-tab',
+      expiresAt: Date.now() + 60_000,
+    }));
+
+    act(() => { getTransport(transports, 0).emitState('closed'); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+
+    expect(transports).toHaveLength(1);
+    expect(getTransport(transports, 0).close).toHaveBeenCalled();
+    expect(currentState.connectionStatus).toBe('error');
+    expect(currentState.connectionError).toBe(localConnectionFailureCodes.sessionInUse);
   });
 
   it('freezes the current draft and reuses the same tagged submit for repeated finalization snapshots', async () => {

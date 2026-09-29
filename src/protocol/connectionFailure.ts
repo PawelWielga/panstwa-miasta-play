@@ -14,9 +14,15 @@ export const connectionFailureCodes = {
   unknown: 'unknown',
 } as const;
 
-export type ConnectionFailureCode = typeof connectionFailureCodes[keyof typeof connectionFailureCodes];
+export const localConnectionFailureCodes = {
+  sessionInUse: 'session_in_use',
+} as const;
 
-export const connectionFailureCodeValues: readonly ConnectionFailureCode[] = Object.values(connectionFailureCodes);
+export type WireConnectionFailureCode = typeof connectionFailureCodes[keyof typeof connectionFailureCodes];
+export type LocalConnectionFailureCode = typeof localConnectionFailureCodes[keyof typeof localConnectionFailureCodes];
+export type ConnectionFailureCode = WireConnectionFailureCode | LocalConnectionFailureCode;
+
+export const connectionFailureCodeValues: readonly WireConnectionFailureCode[] = Object.values(connectionFailureCodes);
 
 export function connectionFailureCodeForGameError(code?: string): ConnectionFailureCode {
   switch (code) {
