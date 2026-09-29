@@ -10,6 +10,7 @@ export const connectionFailureCodes = {
   p2pNetworkBlocked: 'p2p_network_blocked',
   signalingInterrupted: 'signaling_interrupted',
   gameConnectionLost: 'game_connection_lost',
+  sessionInUse: 'session_in_use',
   cancelled: 'cancelled',
   unknown: 'unknown',
 } as const;
