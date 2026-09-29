@@ -57,7 +57,6 @@ export function classifyConnectTimeout(
   peerConnection?: TimeoutPeerConnectionState,
 ): ConnectionFailureCode {
   if (peerConnection?.signalingState === 'stable'
-    && peerConnection.iceGatheringState === 'complete'
     && (peerConnection.iceConnectionState === 'checking'
       || peerConnection.iceConnectionState === 'failed'
       || peerConnection.iceConnectionState === 'disconnected')) {
