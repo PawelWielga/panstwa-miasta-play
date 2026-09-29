@@ -1,5 +1,5 @@
 import { MAX_MESSAGE_BYTES, REQUEST_ID_MAX_LENGTH, SUPPORTED_GAME_PROTOCOL_VERSION } from './constants';
-import type { ClientMessage, ClientRoomClosedAcknowledgementMessage, CountriesCitiesSubmitMessage, CountriesCitiesWheelSpinHoldCancelledMessage, CountriesCitiesWheelSpinHoldStartedMessage, CountriesCitiesWheelState, JsonValue, PlayerProfile } from './messages';
+import type { ClientLeaveMessage, ClientMessage, ClientRoomClosedAcknowledgementMessage, CountriesCitiesSubmitMessage, CountriesCitiesWheelSpinHoldCancelledMessage, CountriesCitiesWheelSpinHoldStartedMessage, CountriesCitiesWheelState, JsonValue, PlayerProfile } from './messages';
 import { generateRequestId } from '../utils/ids';
 import { encodedMessageSize } from './messageSize';
 import { isBoundedString, parseSubmissionAnswers } from './validation';
@@ -31,6 +31,9 @@ export function createRoomClosedAcknowledgement(
     sentAt: Date.now(),
     ...(requestId ? { requestId } : {}),
   };
+}
+export function createClientLeave(playerId: string, roomId: string, hostSessionId: string): ClientLeaveMessage {
+  return { type: 'client:leave', roomId, hostSessionId, playerId, ...meta(playerId) };
 }
 export function createRejoin(profile: PlayerProfile, lastSeenSequenceNumber: number): ClientMessage {
   return { type: 'client:rejoin', protocolVersion: SUPPORTED_GAME_PROTOCOL_VERSION, player: profile, lastSeenSequenceNumber, ...meta(profile.id) };

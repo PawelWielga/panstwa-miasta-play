@@ -524,3 +524,21 @@ When the Android host intentionally closes a room it broadcasts `host:room-close
 The browser then shows a terminal `Host zakończył rozgrywkę` screen with a single action returning to the main join screen. Transport `closed`/`error` callbacks arriving after the shutdown message must not enter the normal reconnect path.
 
 This is an additive protocol extension and does not change protocol version 3.
+
+## Explicit client leave
+
+Świadome wyjście klienta WWW jest odrębną intencją od utraty transportu. Klient wysyła best-effort komunikat `client:leave` przed zamknięciem bieżącego transportu:
+
+```json
+{
+  "type": "client:leave",
+  "roomId": "ABC123",
+  "hostSessionId": "...",
+  "playerId": "...",
+  "senderId": "...",
+  "requestId": "...",
+  "sentAt": 0
+}
+```
+
+`roomId`, `hostSessionId` i `playerId` muszą wskazywać bieżącą sesję oraz tożsamość gracza. Brak `client:leave` oznacza wyłącznie utratę transportu i nie może być interpretowany jako świadome opuszczenie gry. Zdarzenia `offline`, `visibilitychange`, `pagehide`, reload oraz utrata DataChannel nie wysyłają tego komunikatu i zachowują ścieżkę reconnect/resume.

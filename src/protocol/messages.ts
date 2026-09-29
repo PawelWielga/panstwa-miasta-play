@@ -196,6 +196,9 @@ export interface ClientHeartbeatMessage extends MessageMetadata {
 export interface ClientRoomClosedAcknowledgementMessage extends MessageMetadata {
   type: 'client:room-closed-ack'; gameId: string; shutdownId: string; playerId: string;
 }
+export interface ClientLeaveMessage extends MessageMetadata {
+  type: 'client:leave'; roomId: string; hostSessionId: string; playerId: string;
+}
 export interface ClientRejoinMessage extends MessageMetadata {
   type: 'client:rejoin'; protocolVersion: number; player: PlayerProfile; lastSeenSequenceNumber: number;
 }
@@ -225,4 +228,4 @@ export interface CountriesCitiesStartWheelSpinMessage extends MessageMetadata {
   holdDurationMs?: number;
   holdId?: string;
 }
-export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRoomClosedAcknowledgementMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage | CountriesCitiesWheelSpinHoldStartedMessage | CountriesCitiesWheelSpinHoldCancelledMessage | CountriesCitiesStartWheelSpinMessage;
+export type ClientMessage = PlayerHelloMessage | GameReadyMessage | ClientHeartbeatMessage | ClientRoomClosedAcknowledgementMessage | ClientLeaveMessage | ClientRejoinMessage | CountriesCitiesSubmitMessage | CountriesCitiesEditAnswersMessage | CountriesCitiesWheelSpinHoldStartedMessage | CountriesCitiesWheelSpinHoldCancelledMessage | CountriesCitiesStartWheelSpinMessage;

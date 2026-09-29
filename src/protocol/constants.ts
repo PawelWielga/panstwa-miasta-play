@@ -34,6 +34,7 @@ export const clientMessageTypes = [
   'game:ready',
   'client:heartbeat',
   'client:room-closed-ack',
+  'client:leave',
   'client:rejoin',
   'countries-cities:submit',
   'countries-cities:edit-answers',

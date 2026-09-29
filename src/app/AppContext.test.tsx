@@ -611,3 +611,96 @@ describe('AppProvider connection lifecycle', () => {
   });
 
 });
+
+describe('explicit leave lifecycle', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  async function connectAndAdmit(transports: DeferredTransport[]): Promise<DeferredTransport> {
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+    act(() => {
+      getTransport(transports, 0).emitMessage({
+        type: 'room:players',
+        protocolVersion: 4,
+        players: [currentState.identity.profile],
+      });
+    });
+    return getTransport(transports, 0);
+  }
+
+  it('sends explicit leave, clears resume state and ignores stale transport events', async () => {
+    const transports: DeferredTransport[] = [];
+    const transport = await connectAndAdmit(transports);
+    const playerId = currentState.identity.playerId;
+    expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
+
+    act(() => { actions.leaveGame(); });
+
+    expect(transport.send).toHaveBeenLastCalledWith(expect.objectContaining({
+      type: 'client:leave',
+      roomId: joinParameters.roomId,
+      hostSessionId: joinParameters.hostSessionId,
+      playerId,
+      senderId: playerId,
+    }));
+    expect(transport.close).toHaveBeenCalledTimes(1);
+    expect(readLatestUnfinishedMultiplayerSession()).toBeNull();
+    expect(currentState.connectionStatus).toBe('idle');
+    expect(currentState.identity.playerId).toBe(playerId);
+
+    act(() => {
+      transport.emitState('closed');
+      transport.emitMessage({ type: 'room:players', protocolVersion: 4, players: [] });
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('pageshow'));
+    });
+    expect(transports).toHaveLength(1);
+    expect(currentState.connectionStatus).toBe('idle');
+
+    act(() => { actions.leaveGame(); });
+    expect(transport.send.mock.calls.filter(([message]) => message.type === 'client:leave')).toHaveLength(1);
+  });
+
+  it('returns to the join screen even when sending leave fails', async () => {
+    const transports: DeferredTransport[] = [];
+    const transport = await connectAndAdmit(transports);
+    expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
+    transport.send.mockImplementation((message: ClientMessage) => {
+      if (message.type === 'client:leave') throw new Error('send failed');
+    });
+
+    act(() => { actions.leaveGame(); });
+
+    expect(transport.close).toHaveBeenCalledTimes(1);
+    expect(readLatestUnfinishedMultiplayerSession()).toBeNull();
+    expect(currentState.connectionStatus).toBe('idle');
+  });
+
+  it('does not treat pagehide or reconnect cancellation as explicit leave', async () => {
+    const transports: DeferredTransport[] = [];
+    const transport = await connectAndAdmit(transports);
+
+    act(() => { window.dispatchEvent(new Event('pagehide')); });
+    expect(transport.send.mock.calls.some(([message]) => message.type === 'client:leave')).toBe(false);
+    expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
+
+    act(() => { actions.cancel(); });
+    expect(transport.send.mock.calls.some(([message]) => message.type === 'client:leave')).toBe(false);
+    expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
+  });
+});

@@ -272,3 +272,31 @@
 @media (prefers-reduced-motion: reduce) {
   .phase-progress i, .answer-progress i { animation: none !important; transition: none !important; }
 }
+
+.leave-game-actions {
+  display: flex;
+  justify-content: center;
+  margin: 16px 0 0;
+}
+
+.native-leave-game-button {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--pm-color-error) 48%, var(--pm-color-border));
+  border-radius: 16px;
+  background: var(--pm-color-surface);
+  color: var(--pm-color-error);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.native-leave-game-button:hover {
+  background: color-mix(in srgb, var(--pm-color-error) 6%, var(--pm-color-surface));
+}
+
+.native-leave-game-button:focus-visible {
+  outline: 2px solid var(--pm-color-error);
+  outline-offset: 2px;
+}
