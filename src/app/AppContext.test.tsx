@@ -17,7 +17,7 @@ import {
   readLatestUnfinishedMultiplayerSession,
   saveUnfinishedMultiplayerSession,
 } from '../storage/unfinishedMultiplayerSessionStorage';
-import { createSessionTabLease } from '../storage/sessionTabLease';
+import { createSessionTabLease, sessionTabLeaseStorageKey } from '../storage/sessionTabLease';
 import { AppProvider, useApp, type AppActions } from './AppContext';
 
 class DeferredTransport implements GameTransport {
@@ -514,6 +514,41 @@ describe('AppProvider connection lifecycle', () => {
 
     expect(transports).toHaveLength(1);
     expect(getTransport(transports, 0).connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not auto-reconnect after another tab takes the active lease', async () => {
+    vi.useFakeTimers();
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+
+    const leaseKey = sessionTabLeaseStorageKey({
+      roomId: joinParameters.roomId,
+      hostSessionId: joinParameters.hostSessionId,
+      playerId: currentState.identity.playerId,
+    });
+    window.localStorage.setItem(leaseKey, JSON.stringify({
+      ownerId: 'other-tab',
+      expiresAt: Date.now() + 60_000,
+    }));
+
+    act(() => { getTransport(transports, 0).emitState('closed'); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+
+    expect(transports).toHaveLength(1);
+    expect(getTransport(transports, 0).close).toHaveBeenCalled();
+    expect(currentState.connectionStatus).toBe('error');
+    expect(currentState.connectionError).toBe(connectionFailureCodes.sessionInUse);
   });
 
   it('freezes the current draft and reuses the same tagged submit for repeated finalization snapshots', async () => {
