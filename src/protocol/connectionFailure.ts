@@ -16,6 +16,7 @@ export const connectionFailureCodes = {
 
 export const localConnectionFailureCodes = {
   sessionInUse: 'session_in_use',
+  languageMismatch: 'language_mismatch',
 } as const;
 
 export type WireConnectionFailureCode = typeof connectionFailureCodes[keyof typeof connectionFailureCodes];
@@ -26,6 +27,7 @@ export const connectionFailureCodeValues: readonly WireConnectionFailureCode[] =
 
 export function connectionFailureCodeForGameError(code?: string): ConnectionFailureCode {
   switch (code) {
+    case 'language_mismatch': return localConnectionFailureCodes.languageMismatch;
     case 'room_full': return connectionFailureCodes.roomFull;
     case 'game_already_started': return connectionFailureCodes.gameAlreadyStarted;
     default: return connectionFailureCodes.joinRejected;

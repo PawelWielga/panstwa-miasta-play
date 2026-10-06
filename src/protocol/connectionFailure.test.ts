@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { connectionFailureCodes, connectionFailureCodeValues, connectionFailureCodeForGameError } from './connectionFailure';
+import { connectionFailureCodes, connectionFailureCodeValues, connectionFailureCodeForGameError, localConnectionFailureCodes } from './connectionFailure';
 
 describe('connection failure contract', () => {
   it('keeps the Android and WWW wire values stable', () => {
@@ -23,6 +23,7 @@ describe('connection failure contract', () => {
   it('maps host join rejection codes without using host copy', () => {
     expect(connectionFailureCodeForGameError('room_full')).toBe(connectionFailureCodes.roomFull);
     expect(connectionFailureCodeForGameError('game_already_started')).toBe(connectionFailureCodes.gameAlreadyStarted);
+    expect(connectionFailureCodeForGameError('language_mismatch')).toBe(localConnectionFailureCodes.languageMismatch);
     expect(connectionFailureCodeForGameError('unexpected')).toBe(connectionFailureCodes.joinRejected);
   });
 });

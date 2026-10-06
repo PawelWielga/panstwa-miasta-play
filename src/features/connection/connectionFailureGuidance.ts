@@ -95,6 +95,13 @@ const guidanceByCode: Record<ConnectionFailureCode, ConnectionFailureGuidance> =
     actionLabel: 'Spróbuj ponownie',
     hint: 'Zamknij drugą kartę albo opuść w niej grę, a następnie spróbuj ponownie tutaj.',
   },
+  [localConnectionFailureCodes.languageMismatch]: {
+    title: 'Inny język pokoju',
+    message: 'Ten pokój wymaga innego języka. Wybierz pokój po polsku.',
+    primaryAction: 'editConnection',
+    actionLabel: 'Wpisz kod innego pokoju',
+    hint: 'Poproś prowadzącego o kod pokoju w języku polskim.',
+  },
   [connectionFailureCodes.cancelled]: {
     title: 'Dołączanie anulowane',
     message: 'Próba dołączenia została anulowana.',

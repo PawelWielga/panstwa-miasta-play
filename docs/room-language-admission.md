@@ -12,7 +12,12 @@ terminal admission failure: close the connection and do not reconnect or fall
 back to another transport automatically.
 
 Polish web clients can join Polish rooms. English rooms require an English
-interface, which the web client does not yet provide. Older web builds without
+interface, which the web client does not yet provide. The web error screen explains
+the mismatch and directs the player to enter a Polish room's code; it does not
+suggest retrying the same incompatible room. This display classification is local
+and does not extend the shared transport-v4 connection-failure wire values.
+
+Older web builds without
 the declaration are rejected even for Polish rooms. Deploy the updated web
 client before distributing hosts that enforce the admission policy. Existing
 transport-v4 authentication vectors and snapshot compatibility are unchanged.

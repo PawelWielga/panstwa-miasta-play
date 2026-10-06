@@ -41,6 +41,17 @@ it('asks for the code again when the invitation is invalid', async () => {
   expect(mocked.value.actions.retry).not.toHaveBeenCalled();
 });
 
+it('directs a language mismatch to another room without retrying', async () => {
+  mocked.value = createValue(localConnectionFailureCodes.languageMismatch);
+  render(<ConnectionErrorScreen />);
+
+  expect(screen.getByRole('heading', { name: 'Inny język pokoju' })).toBeInTheDocument();
+  expect(screen.getByText('Ten pokój wymaga innego języka. Wybierz pokój po polsku.')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Wpisz kod innego pokoju' }));
+  expect(mocked.value.actions.cancel).toHaveBeenCalled();
+  expect(mocked.value.actions.retry).not.toHaveBeenCalled();
+});
+
 it('keeps a generic timeout separate from confirmed blocked P2P', async () => {
   mocked.value = createValue(connectionFailureCodes.connectionTimeout);
   render(<ConnectionErrorScreen />);
