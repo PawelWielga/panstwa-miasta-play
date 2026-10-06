@@ -1,9 +1,9 @@
 import type { GameErrorMessage, HostMessage } from './messages';
 
-type TerminalJoinErrorCode = 'room_full' | 'game_already_started';
+type TerminalJoinErrorCode = 'room_full' | 'game_already_started' | 'language_mismatch';
 type TerminalJoinErrorMessage = GameErrorMessage & { code: TerminalJoinErrorCode };
 
-const terminalJoinErrorCodes = new Set<TerminalJoinErrorCode>(['room_full', 'game_already_started']);
+const terminalJoinErrorCodes = new Set<TerminalJoinErrorCode>(['room_full', 'game_already_started', 'language_mismatch']);
 
 export function isTerminalJoinError(message: HostMessage): message is TerminalJoinErrorMessage {
   return message.type === 'game:error'

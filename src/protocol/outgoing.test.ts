@@ -15,6 +15,7 @@ describe('outgoing protocol version', () => {
   it('uses the internal version for player hello', () => {
     expect(createPlayerHello({ profile, reconnectToken: 'reconnect-token' })).toMatchObject({
       type: 'player:hello',
+      appLanguageCode: 'pl',
       protocolVersion: SUPPORTED_GAME_PROTOCOL_VERSION,
     });
   });
@@ -22,6 +23,7 @@ describe('outgoing protocol version', () => {
   it('uses the internal version for reconnect', () => {
     expect(createRejoin(profile, 7)).toMatchObject({
       type: 'client:rejoin',
+      appLanguageCode: 'pl',
       protocolVersion: SUPPORTED_GAME_PROTOCOL_VERSION,
     });
   });

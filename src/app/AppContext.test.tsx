@@ -407,6 +407,7 @@ describe('AppProvider connection lifecycle', () => {
   it.each([
     ['room_full', 'Pokój jest pełny. Host ustawił limit graczy dla tej rozgrywki.'],
     ['game_already_started', 'Gra już się rozpoczęła. Poproś hosta o nowy pokój albo spróbuj później.'],
+    ['language_mismatch', 'The app language must match the room language.'],
   ])('stops reconnect after terminal join rejection %s', async (code, message) => {
     vi.useFakeTimers();
     const transports: DeferredTransport[] = [];
