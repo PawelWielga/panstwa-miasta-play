@@ -4,7 +4,7 @@ import { ConnectionBanner } from '../../components/ConnectionBanner';
 import { Card, Layout } from '../../components/Layout';
 import { wheelSpinRequestKey } from '../../protocol/wheel';
 import type { CountriesCitiesWheelState } from '../../protocol/messages';
-import { FortuneWheel } from './FortuneWheel';
+import { FortuneWheel } from './FortuneWheelView';
 
 const MAX_WHEEL_HOLD_DURATION_MS = 2_000;
 const WHEEL_HOLD_PROGRESS_INTERVAL_MS = 50;
