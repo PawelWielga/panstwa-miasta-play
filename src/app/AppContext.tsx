@@ -40,12 +40,20 @@ import {
   saveAnswerDraft,
   type AnswerDraftScope,
   type FrozenFinalizationResponse,
+  type StoredAnswerDraft,
 } from '../storage/answerDraftStorage';
 import {
   createSessionTabLease,
   sessionTabLeaseHeartbeatMs,
+  sessionTabLeaseStorageKey,
   type SessionTabLease,
 } from '../storage/sessionTabLease';
+
+import {
+  readPersistentAnswerDraft,
+  savePersistentAnswerDraft,
+  removePersistentAnswerDraftsForSession,
+} from '../storage/persistentAnswerDraftStorage';
 
 const UNFINISHED_SESSION_REFRESH_INTERVAL_MS = 60_000;
 const ANSWER_DRAFT_DEBOUNCE_MS = 200;
@@ -141,28 +149,60 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     };
   }, []);
 
+  const persistentDraftOptions = useCallback((scope: Pick<AnswerDraftScope, 'hostSessionId' | 'roomId' | 'playerId'>) => ({
+    isOwner: (): boolean => {
+      const lease = sessionLeaseRef.current;
+      return lease?.storageKey === sessionTabLeaseStorageKey(scope) && lease.isOwner();
+    },
+  }), []);
+
+  const saveScopedAnswerDraft = useCallback((draft: StoredAnswerDraft): void => {
+    saveAnswerDraft(draft);
+    const options = persistentDraftOptions(draft.scope);
+    if (!draft.frozenFinalization && Object.values(draft.answers).every((answer) => answer.trim() === '')) {
+      removePersistentAnswerDraftsForSession(draft.scope, options);
+    } else {
+      savePersistentAnswerDraft(draft, options);
+    }
+  }, [persistentDraftOptions]);
+
+  const readScopedAnswerDraft = useCallback((scope: AnswerDraftScope): StoredAnswerDraft | null => {
+    const persistent = readPersistentAnswerDraft(scope, persistentDraftOptions(scope));
+    return readAnswerDraft(scope) ?? persistent;
+  }, [persistentDraftOptions]);
+
+  const removePersistentSessionDraft = useCallback((current: AppState): void => {
+    const target = current.joinParameters;
+    if (!target) return;
+    const scope = { hostSessionId: target.hostSessionId, roomId: target.roomId, playerId: current.identity.playerId };
+    removePersistentAnswerDraftsForSession(scope, persistentDraftOptions(scope));
+  }, [persistentDraftOptions]);
+
   const flushCurrentAnswerDraft = useCallback((): void => {
     const current = stateRef.current;
     const scope = answerDraftScope(current);
-    if (!scope || current.snapshot?.phase !== 'answering') return;
+    if (!scope || current.snapshot?.phase !== 'answering'
+      || current.snapshot.donePlayerIds.includes(current.identity.playerId)
+      || current.snapshot.submissions[current.identity.playerId]) return;
     const frozen = frozenFinalizationRef.current;
     const matchingFrozen = frozen
       && frozen.gameId === scope.gameId
       && frozen.roundNumber === scope.roundNumber
       ? frozen
       : undefined;
-    saveAnswerDraft({ scope, answers: current.answers, ...(matchingFrozen ? { frozenFinalization: matchingFrozen } : {}) });
-  }, [answerDraftScope]);
+    saveScopedAnswerDraft({ scope, answers: current.answers, ...(matchingFrozen ? { frozenFinalization: matchingFrozen } : {}) });
+  }, [answerDraftScope, saveScopedAnswerDraft]);
 
   const clearAnswerDraftForState = useCallback((current: AppState): void => {
     const scope = answerDraftScope(current);
     if (scope) removeAnswerDraft(scope);
+    removePersistentSessionDraft(current);
     frozenFinalizationRef.current = null;
     seenFinalizationRef.current = null;
     legacyFallbackSentRef.current = null;
     window.clearTimeout(answerDraftTimerRef.current);
     answerDraftTimerRef.current = 0;
-  }, [answerDraftScope]);
+  }, [answerDraftScope, removePersistentSessionDraft]);
 
   const handleSnapshotAnswerLifecycle = useCallback((snapshot: GameSnapshot): Record<string, string> | null => {
     const current = stateRef.current;
@@ -185,11 +225,16 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       legacyFallbackSentRef.current = null;
     }
 
-    const stored = nextScope ? readAnswerDraft(nextScope) : null;
+    const stored = nextScope ? readScopedAnswerDraft(nextScope) : null;
+    const hostHasAnswers = snapshot.donePlayerIds.includes(playerId) || snapshot.submissions[playerId] !== undefined;
+    if (hostHasAnswers || snapshot.phase !== 'answering') {
+      removePersistentSessionDraft(current);
+      if (nextScope) removeAnswerDraft(nextScope);
+    }
     const sameCurrentRound = previousSnapshot?.gameId === snapshot.gameId
       && previousSnapshot.round?.number === snapshot.round?.number;
     const restorableAnswers = snapshot.phase === 'answering'
-      && !snapshot.donePlayerIds.includes(playerId)
+      && !hostHasAnswers
       && !current.hasLocalAnswerDraft
       ? stored?.answers ?? null
       : null;
@@ -197,7 +242,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     const finalization = snapshot.answerFinalization;
     if (finalization && nextScope && snapshot.phase === 'answering' && snapshot.round) {
       seenFinalizationRef.current = { gameId: snapshot.gameId, roundNumber: snapshot.round.number };
-      if (!snapshot.donePlayerIds.includes(playerId)) {
+      if (!hostHasAnswers) {
         const inMemory = frozenFinalizationRef.current;
         const storedFrozen = stored?.frozenFinalization;
         const existingFrozen = inMemory
@@ -230,7 +275,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
           };
           if (!frozen.requestId) throw new Error('Brak requestId finalizacji.');
           frozenFinalizationRef.current = frozen;
-          saveAnswerDraft({ scope: nextScope, answers: frozen.answers, frozenFinalization: frozen });
+          saveScopedAnswerDraft({ scope: nextScope, answers: frozen.answers, frozenFinalization: frozen });
           send(message);
         } catch (error) {
           recordConnectionDiagnostic('answer-finalization.prepare.failed', 'error', getDiagnosticErrorDetails(error));
@@ -249,7 +294,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         || previousStored?.frozenFinalization !== undefined;
       const fallbackKey = JSON.stringify([snapshot.gameId, snapshot.round?.number, playerId]);
       if (!finalizationWasSeen
-        && !snapshot.donePlayerIds.includes(playerId)
+        && !hostHasAnswers
         && legacyFallbackSentRef.current !== fallbackKey) {
         legacyFallbackSentRef.current = fallbackKey;
         const answers = current.hasLocalAnswerDraft ? current.answers : previousStored?.answers ?? current.answers;
@@ -270,7 +315,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     }
 
     return restorableAnswers;
-  }, [answerDraftScope, send]);
+  }, [answerDraftScope, send, readScopedAnswerDraft, saveScopedAnswerDraft, removePersistentSessionDraft]);
 
   const removeCurrentUnfinishedSession = useCallback((): void => {
     const currentState = stateRef.current;
@@ -384,8 +429,8 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       current.terminalJoinRejected = false;
       window.clearTimeout(current.timer);
       current.timer = 0;
-      releaseSessionLease();
       clearAnswerDraftForState(stateRef.current);
+      releaseSessionLease();
       removeCurrentUnfinishedSession();
       send(createRoomClosedAcknowledgement(
         stateRef.current.identity.playerId,
@@ -418,6 +463,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       current.terminalJoinRejected = true;
       window.clearTimeout(current.timer);
       current.timer = 0;
+      clearAnswerDraftForState(stateRef.current);
       releaseSessionLease();
       removeCurrentUnfinishedSession();
       recordConnectionDiagnostic('join.rejected', 'warning', { code: message.code });

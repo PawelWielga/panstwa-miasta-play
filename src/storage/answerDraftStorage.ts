@@ -5,7 +5,7 @@ const KEY = 'panstwa-miasta.answer-drafts.v1';
 const SCHEMA_VERSION = 1;
 const SCOPE_ID_MAX_LENGTH = 128;
 
-type DraftStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+export type DraftStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 export interface AnswerDraftScope {
   hostSessionId: string;
@@ -125,7 +125,7 @@ function readEntries(storage: DraftStorage): Map<string, StoredAnswerDraft> {
     }
     const result = new Map<string, StoredAnswerDraft>();
     for (const [storedKey, value] of Object.entries(decoded.entries)) {
-      const draft = decodeDraft(value);
+      const draft = decodeAnswerDraft(value);
       if (draft && scopeKey(draft.scope) === storedKey) result.set(storedKey, draft);
     }
     return result;
@@ -135,7 +135,7 @@ function readEntries(storage: DraftStorage): Map<string, StoredAnswerDraft> {
   }
 }
 
-function decodeDraft(value: unknown): StoredAnswerDraft | null {
+export function decodeAnswerDraft(value: unknown): StoredAnswerDraft | null {
   if (!isRecord(value) || !isRecord(value.scope)) return null;
   if (typeof value.scope.hostSessionId !== 'string'
     || typeof value.scope.roomId !== 'string'

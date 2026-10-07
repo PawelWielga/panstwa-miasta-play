@@ -17,6 +17,7 @@ import {
   readLatestUnfinishedMultiplayerSession,
   saveUnfinishedMultiplayerSession,
 } from '../storage/unfinishedMultiplayerSessionStorage';
+import { persistentAnswerDraftStorageKey, readPersistentAnswerDraft } from '../storage/persistentAnswerDraftStorage';
 import { createSessionTabLease, sessionTabLeaseStorageKey } from '../storage/sessionTabLease';
 import { AppProvider, useApp, type AppActions } from './AppContext';
 
@@ -86,8 +87,8 @@ function Harness({ onActions }: { onActions: (value: AppActions) => void }) {
 
 const captureActions = (value: AppActions): void => { actions = value; };
 
-function renderProvider(factory: () => GameTransport): void {
-  render(<AppProvider transportFactory={factory}><Harness onActions={captureActions} /></AppProvider>);
+function renderProvider(factory: () => GameTransport): ReturnType<typeof render> {
+  return render(<AppProvider transportFactory={factory}><Harness onActions={captureActions} /></AppProvider>);
 }
 
 function getTransport(transports: DeferredTransport[], index: number): DeferredTransport {
@@ -551,6 +552,60 @@ describe('AppProvider connection lifecycle', () => {
     expect(currentState.connectionStatus).toBe('error');
     expect(currentState.connectionError).toBe(localConnectionFailureCodes.sessionInUse);
   });
+
+  for (const mode of ['same-round', 'done', 'submitted', 'new-round', 'review', 'closed'] as const) {
+    it(`recovers a closed tab only after host confirmation: ${mode}`, async () => {
+      const transports: DeferredTransport[] = [];
+      const factory = (): DeferredTransport => {
+        const transport = new DeferredTransport();
+        transports.push(transport);
+        return transport;
+      };
+      const firstTab = renderProvider(factory);
+      let connecting!: Promise<void>;
+      act(() => { connecting = actions.connect(joinParameters); });
+      await act(async () => { getTransport(transports, 0).open(); await connecting; });
+      const profile = currentState.identity.profile;
+      act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot: answeringSnapshot(profile, 1) }); });
+      act(() => { actions.setAnswer('city', 'Augustów'); });
+      act(() => { window.dispatchEvent(new Event('pagehide')); });
+      expect(window.localStorage.getItem(persistentAnswerDraftStorageKey)).not.toBeNull();
+      firstTab.unmount();
+      window.sessionStorage.clear(); // A definitively closed tab loses this store.
+      const unfinished = readLatestUnfinishedMultiplayerSession();
+      if (!unfinished) throw new Error('Missing admitted resume context.');
+      const reopened = renderProvider(factory);
+      expect(currentState.answers).toEqual({});
+      act(() => { connecting = actions.connect(unfinished.target, unfinished); });
+      await act(async () => { getTransport(transports, 1).open(); await connecting; });
+      expect(currentState.answers).toEqual({}); // An open connection alone cannot restore.
+      const resumed = answeringSnapshot(profile, 2, {
+        ...(mode === 'done' ? { donePlayerIds: [profile.id] } : {}),
+        ...(mode === 'submitted' ? { submissions: { [profile.id]: { playerId: profile.id, playerName: profile.name, answers: { city: 'Accepted' } } } } : {}),
+        ...(mode === 'review' ? { phase: 'categoryReview' } : {}),
+      });
+      if (mode === 'new-round' && resumed.round) resumed.round = { ...resumed.round, number: 2 };
+      act(() => { getTransport(transports, 1).emitMessage(mode === 'closed'
+        ? { type: 'host:room-closed', gameId: joinParameters.roomId, shutdownId: 'closed-on-resume' }
+        : { type: 'game:snapshot', snapshot: resumed }); });
+      const scope = { hostSessionId: joinParameters.hostSessionId, roomId: joinParameters.roomId,
+        gameId: resumed.gameId, roundNumber: 1, playerId: profile.id };
+      if (mode === 'same-round') {
+        expect(currentState.answers.city).toBe('Augustów');
+        expect(readPersistentAnswerDraft(scope, { isOwner: () => true })?.answers.city).toBe('Augustów');
+        act(() => { actions.leaveGame(); });
+        expect(window.localStorage.getItem(persistentAnswerDraftStorageKey)).toBeNull();
+      } else {
+        expect(currentState.answers.city).not.toBe('Augustów');
+        expect(window.localStorage.getItem(persistentAnswerDraftStorageKey)).toBeNull();
+      }
+      const submissions = getTransport(transports, 1).send.mock.calls.map(([message]) => message)
+        .filter((message) => message.type === 'countries-cities:submit');
+      expect(submissions).toHaveLength(0);
+      reopened.unmount();
+      expect(window.localStorage.getItem(persistentAnswerDraftStorageKey)).toBeNull();
+    });
+  }
 
   it('freezes the current draft and reuses the same tagged submit for repeated finalization snapshots', async () => {
     const transports: DeferredTransport[] = [];
