@@ -459,6 +459,68 @@ describe('AppProvider connection lifecycle', () => {
     }
   });
 
+  it('reacquires the tab lease before retrying after a language mismatch', async () => {
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+    act(() => {
+      getTransport(transports, 0).emitMessage({
+        type: 'room:players',
+        protocolVersion: 4,
+        players: [currentState.identity.profile],
+      });
+      getTransport(transports, 0).emitMessage({
+        type: 'game:error',
+        code: 'language_mismatch',
+        message: 'The app language must match the room language.',
+        gameLanguageCode: 'en',
+      });
+    });
+
+    const otherTabLease = createSessionTabLease({
+      roomId: joinParameters.roomId,
+      hostSessionId: joinParameters.hostSessionId,
+      playerId: currentState.identity.playerId,
+    }, { ownerId: 'other-tab-after-language-mismatch' });
+    expect(otherTabLease.acquire()).toBe(true);
+
+    act(() => { actions.changeLanguageAndRetry('en'); });
+
+    expect(transports).toHaveLength(1);
+    expect(currentState.connectionStatus).toBe('error');
+    expect(currentState.connectionError).toBe(localConnectionFailureCodes.sessionInUse);
+
+    otherTabLease.release();
+    act(() => { actions.retry(); });
+    expect(transports).toHaveLength(2);
+
+    let retryPromise!: Promise<void>;
+    retryPromise = getTransport(transports, 1).connect.mock.results[0]?.value as Promise<void>;
+    await act(async () => {
+      getTransport(transports, 1).open();
+      await retryPromise;
+    });
+
+    expect(getTransport(transports, 1).send).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ type: 'player:hello', appLanguageCode: 'en' }),
+    );
+    expect(getTransport(transports, 1).send).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ type: 'client:rejoin', appLanguageCode: 'en' }),
+    );
+  });
+
   it('ignores stale callbacks and cancels pending retry after a successful reconnect', async () => {
     vi.useFakeTimers();
     const transports: DeferredTransport[] = [];
