@@ -84,9 +84,8 @@ export function JoinScreen({ search }: { search?: string }) {
 
   const protocolError = errors.protocol ?? parsed.errors.protocol;
   const localizedProtocolError = protocolError ? translateLegacyMessage(protocolError, language) : null;
-  const localizedCodeError = errors.code ?? parsed.errors.code
-    ? translateLegacyMessage((errors.code ?? parsed.errors.code)!, language)
-    : null;
+  const codeError = errors.code ?? parsed.errors.code;
+  const localizedCodeError = codeError ? translateLegacyMessage(codeError, language) : null;
   const showResumeOffer = unfinishedSession !== null && !parsed.fromInvitation;
   return <Layout><Card className="join-card">
     <div className="hero"><span className="eyebrow">{t('Dołącz do rozgrywki', 'Join the game')}</span><h1>{t('Gotowy na rundę?', 'Ready for a round?')}</h1><p>{t('Wpisz swój nick i 6-znakowy kod pokoju wyświetlony przez prowadzącego.', 'Enter your nickname and the 6-character room code shown by the host.')}</p></div>

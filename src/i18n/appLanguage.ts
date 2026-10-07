@@ -118,7 +118,7 @@ function emit(): void {
 
 function readPreference(): LanguagePreference {
   try {
-    const value = globalThis.localStorage?.getItem(STORAGE_KEY);
+    const value = globalThis.localStorage.getItem(STORAGE_KEY);
     if (value === 'pl' || value === 'en' || value === 'system') return value;
   } catch {
     // Private mode or blocked storage: keep an ephemeral System preference.
@@ -128,7 +128,7 @@ function readPreference(): LanguagePreference {
 
 function persistPreference(value: LanguagePreference): void {
   try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, value);
+    globalThis.localStorage.setItem(STORAGE_KEY, value);
   } catch {
     // The language still changes for this tab when persistent storage is unavailable.
   }
@@ -136,7 +136,7 @@ function persistPreference(value: LanguagePreference): void {
 
 function browserLanguages(): readonly string[] {
   if (typeof navigator === 'undefined') return [];
-  return navigator.languages?.length ? navigator.languages : [navigator.language];
+  return navigator.languages.length ? navigator.languages : [navigator.language];
 }
 
 function applyDocumentLanguage(): void {

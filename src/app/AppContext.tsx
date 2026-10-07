@@ -1123,7 +1123,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       dispatch({ type: 'submitted', value: false });
     },
     clearNotice: () => dispatch({ type: 'clear-notice' }),
-  }), [cancel, connect, flushCurrentAnswerDraft, leaveGame, retry, returnToMain, send, updateIdentityAction]);
+  }), [cancel, changeLanguageAndRetry, connect, flushCurrentAnswerDraft, leaveGame, retry, returnToMain, send, updateIdentityAction]);
 
   return <AppContext.Provider value={{ state, actions }}>{children}</AppContext.Provider>;
 }
