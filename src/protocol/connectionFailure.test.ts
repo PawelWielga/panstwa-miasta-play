@@ -24,6 +24,7 @@ describe('connection failure contract', () => {
     expect(connectionFailureCodeForGameError('room_full')).toBe(connectionFailureCodes.roomFull);
     expect(connectionFailureCodeForGameError('game_already_started')).toBe(connectionFailureCodes.gameAlreadyStarted);
     expect(connectionFailureCodeForGameError('language_mismatch')).toBe(localConnectionFailureCodes.languageMismatch);
+    expect(connectionFailureCodeForGameError('invalid_reconnect_credential')).toBe(localConnectionFailureCodes.reconnectSessionRejected);
     expect(connectionFailureCodeForGameError('unexpected')).toBe(connectionFailureCodes.joinRejected);
   });
 });
