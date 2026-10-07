@@ -434,7 +434,12 @@ describe('AppProvider connection lifecycle', () => {
     expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
 
     act(() => {
-      getTransport(transports, 0).emitMessage({ type: 'game:error', code, message });
+      getTransport(transports, 0).emitMessage({
+        type: 'game:error',
+        code,
+        message,
+        ...(code === 'language_mismatch' ? { gameLanguageCode: 'en' as const } : {}),
+      });
       getTransport(transports, 0).emitState('closed');
       window.dispatchEvent(new Event('online'));
       window.dispatchEvent(new Event('pageshow'));
@@ -445,7 +450,13 @@ describe('AppProvider connection lifecycle', () => {
     expect(currentState.connectionError).toBe(connectionFailureCodeForGameError(code));
     expect(getTransport(transports, 0).close).toHaveBeenCalled();
     expect(transports).toHaveLength(1);
-    expect(readLatestUnfinishedMultiplayerSession()).toBeNull();
+    if (code === 'language_mismatch') {
+      expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
+      expect(currentState.requiredGameLanguageCode).toBe('en');
+    } else {
+      expect(readLatestUnfinishedMultiplayerSession()).toBeNull();
+      expect(currentState.requiredGameLanguageCode).toBeNull();
+    }
   });
 
   it('ignores stale callbacks and cancels pending retry after a successful reconnect', async () => {

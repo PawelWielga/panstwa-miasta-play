@@ -41,15 +41,24 @@ it('asks for the code again when the invitation is invalid', async () => {
   expect(mocked.value.actions.retry).not.toHaveBeenCalled();
 });
 
-it('directs a language mismatch to another room without retrying', async () => {
-  mocked.value = createValue(localConnectionFailureCodes.languageMismatch);
+it('offers exactly language switch or exit for a language mismatch', async () => {
+  mocked.value = {
+    state: appState({
+      connectionStatus: 'error',
+      connectionError: localConnectionFailureCodes.languageMismatch,
+      requiredGameLanguageCode: 'en',
+    }),
+    actions: appActions(),
+  };
   render(<ConnectionErrorScreen />);
 
-  expect(screen.getByRole('heading', { name: 'Inny język pokoju' })).toBeInTheDocument();
-  expect(screen.getByText('Ten pokój wymaga innego języka. Wybierz pokój po polsku.')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: 'Wpisz kod innego pokoju' }));
-  expect(mocked.value.actions.cancel).toHaveBeenCalled();
+  expect(screen.getByRole('heading', { name: 'Ten pokój wymaga języka angielskiego' })).toBeInTheDocument();
+  const buttons = screen.getAllByRole('button');
+  expect(buttons).toHaveLength(2);
+  await userEvent.click(screen.getByRole('button', { name: 'Zmień na angielski i dołącz' }));
+  expect(mocked.value.actions.changeLanguageAndRetry).toHaveBeenCalledWith('en');
   expect(mocked.value.actions.retry).not.toHaveBeenCalled();
+  expect(mocked.value.actions.cancel).not.toHaveBeenCalled();
 });
 
 it('keeps a generic timeout separate from confirmed blocked P2P', async () => {
