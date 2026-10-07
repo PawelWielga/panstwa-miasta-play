@@ -106,6 +106,18 @@ it('maps blocked P2P to the change-network recovery', async () => {
   expect(mocked.value.actions.retry).not.toHaveBeenCalled();
 });
 
+it('explains a rejected restored session without blaming the room code', async () => {
+  mocked.value = createValue(localConnectionFailureCodes.reconnectSessionRejected);
+  render(<ConnectionErrorScreen />);
+
+  expect(screen.getByRole('heading', { name: 'Nie można wrócić do gry' })).toBeInTheDocument();
+  expect(screen.getByText('Nie udało się przywrócić Twojego miejsca w tej rozgrywce. Wróć do ekranu dołączania.')).toBeInTheDocument();
+  expect(screen.queryByText(/Kod lub dane pokoju są nieprawidłowe/)).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Wróć do dołączania' }));
+  expect(mocked.value.actions.cancel).toHaveBeenCalled();
+  expect(mocked.value.actions.retry).not.toHaveBeenCalled();
+});
+
 it('maps a full room to returning to the join screen', async () => {
   mocked.value = createValue(connectionFailureCodes.roomFull);
   render(<ConnectionErrorScreen />);
