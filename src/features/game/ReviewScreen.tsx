@@ -3,9 +3,11 @@ import { CategoryResultsList } from '../../components/CategoryResultsList';
 import { ConnectionBanner } from '../../components/ConnectionBanner';
 import { GamePhaseBanner } from '../../components/GamePhaseBanner';
 import { Card, Layout } from '../../components/Layout';
+import { useI18n } from '../../i18n/appLanguage';
 
 export function ReviewScreen() {
   const { state } = useApp();
+  const { t } = useI18n();
   const snapshot = state.snapshot;
   const categoryIndex = snapshot?.round?.categoryIndex ?? state.reviewCategoryIndex;
   const categories = snapshot?.round?.categories ?? state.categories;
@@ -16,21 +18,21 @@ export function ReviewScreen() {
 
   return <Layout><ConnectionBanner /><Card className="game-card review-game-card">
     {hasPreviousResults ? <>
-      <GamePhaseBanner icon="hourglass" title="Oczekiwanie na ocenę" description="Host ocenia odpowiedzi na kolejną kategorię" showProgress />
+      <GamePhaseBanner icon="hourglass" title={t('Oczekiwanie na ocenę', 'Waiting for review')} description={t('Host ocenia odpowiedzi na kolejną kategorię', 'The host is reviewing answers for the next category')} showProgress />
       <div className="phase-section-gap" />
       <CategoryResultsList category={previousCategory} submissions={submissions} results={results} ownPlayerId={state.identity.playerId} />
     </> : <>
-      <GamePhaseBanner icon="hourglass" title="Host sprawdza odpowiedzi" description="Za chwilę zobaczysz punkty za tę kategorię." />
+      <GamePhaseBanner icon="hourglass" title={t('Host sprawdza odpowiedzi', 'The host is reviewing answers')} description={t('Za chwilę zobaczysz punkty za tę kategorię.', 'You will see the points for this category shortly.')} />
       <div className="phase-section-gap" />
-      <h2 className="native-section-title">Czasy odpowiedzi graczy</h2>
-      <div className="answer-timing-list">{state.players.map((player) => <div className="answer-timing-card" key={player.id}><strong>{player.name}</strong><span>Czas odpowiedzi: {formatResponseTime(snapshot?.round?.answeringStartedAt, snapshot?.submittedAtByPlayerId[player.id])}</span></div>)}</div>
-      {snapshot?.settings.speedBonusEnabled ? <p className="native-small-note">Punkty za szybkie odpowiedzi zostaną doliczone na koniec rundy po sprawdzeniu odpowiedzi.</p> : null}
+      <h2 className="native-section-title">{t('Czasy odpowiedzi graczy', 'Player response times')}</h2>
+      <div className="answer-timing-list">{state.players.map((player) => <div className="answer-timing-card" key={player.id}><strong>{player.name}</strong><span>{t('Czas odpowiedzi', 'Response time')}: {formatResponseTime(snapshot?.round?.answeringStartedAt, snapshot?.submittedAtByPlayerId[player.id], t('brak zapisu czasu', 'not recorded'))}</span></div>)}</div>
+      {snapshot?.settings.speedBonusEnabled ? <p className="native-small-note">{t('Punkty za szybkie odpowiedzi zostaną doliczone na koniec rundy po sprawdzeniu odpowiedzi.', 'Fast-answer bonus points will be added at the end of the round after the answers are reviewed.')}</p> : null}
     </>}
   </Card></Layout>;
 }
 
-function formatResponseTime(startedAt: number | null | undefined, submittedAt: number | undefined): string {
-  if (startedAt === null || startedAt === undefined || submittedAt === undefined) return 'brak zapisu czasu';
+function formatResponseTime(startedAt: number | null | undefined, submittedAt: number | undefined, missing: string): string {
+  if (startedAt === null || startedAt === undefined || submittedAt === undefined) return missing;
   const milliseconds = Math.max(0, Math.round(submittedAt - startedAt));
   const minutes = Math.floor(milliseconds / 60_000);
   const seconds = Math.floor(milliseconds / 1_000) % 60;
