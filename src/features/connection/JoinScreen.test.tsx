@@ -9,6 +9,7 @@ import {
   saveUnfinishedMultiplayerSession,
 } from '../../storage/unfinishedMultiplayerSessionStorage';
 import { appActions, appState, joinParameters, testOnlineJoinCode } from '../../test/fixtures';
+import { setLanguagePreference } from '../../i18n/appLanguage';
 
 const mocked = vi.hoisted(() => ({ value: {} as ReturnType<typeof createValue> }));
 function createValue() { return { state: appState(), actions: appActions() }; }
@@ -16,6 +17,7 @@ vi.mock('../../app/AppContext', () => ({ useApp: () => mocked.value }));
 
 describe('JoinScreen', () => {
   afterEach(() => {
+    setLanguagePreference('pl');
     window.localStorage.clear();
     window.history.replaceState({}, '', '/');
   });
@@ -123,5 +125,19 @@ describe('JoinScreen', () => {
     expect(screen.getByText(INCOMPATIBLE_GAME_VERSION_MESSAGE)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Dołącz do gry' }));
     expect(mocked.value.actions.connect).not.toHaveBeenCalled();
+  });
+
+  it('renders the join flow in English when English is selected', () => {
+    setLanguagePreference('en');
+    mocked.value = createValue();
+    render(<JoinScreen search="" />);
+
+    expect(screen.getByText('Join the game')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Ready for a round?' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Your nickname')).toBeInTheDocument();
+    expect(screen.getByLabelText('Room code (6 characters)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Join game' })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe('en');
+    expect(document.title).toBe('City, Country & More');
   });
 });

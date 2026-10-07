@@ -1,11 +1,14 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { AnsweringScreen } from './AnsweringScreen';
 import { appActions, appState } from '../../test/fixtures';
+import { setLanguagePreference } from '../../i18n/appLanguage';
 const mocked = vi.hoisted(() => ({ value: {} as ReturnType<typeof createValue> }));
 function createValue() { return { state: appState(), actions: appActions() }; }
 vi.mock('../../app/AppContext', () => ({ useApp: () => mocked.value }));
+
+afterEach(() => setLanguagePreference('pl'));
 it('collects category answers and submits them', async () => {
   mocked.value = createValue(); render(<AnsweringScreen />);
   await userEvent.type(screen.getByLabelText('Miasto'), 'Augustów');
@@ -53,4 +56,15 @@ it('shows sending and acknowledged states for host finalization', () => {
   rerender(<AnsweringScreen />);
   expect(screen.getByText('Odpowiedzi zapisane')).toBeInTheDocument();
   expect(screen.getByText('Twoje odpowiedzi są zapisane. Czekamy na rozpoczęcie oceny.')).toBeInTheDocument();
+});
+
+
+it('renders the answering controls in English', () => {
+  setLanguagePreference('en');
+  mocked.value = createValue();
+  render(<AnsweringScreen />);
+
+  expect(screen.getByText('Enter answers')).toBeInTheDocument();
+  expect(screen.getByPlaceholderText('Enter answer')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
 });

@@ -237,7 +237,7 @@ function wheelStatus(
       };
     }
     return {
-      title: `${t('Teraz kręci', 'Now spinning')}: ${selectedPlayerName}`,
+      title: t(`Teraz kręci ${selectedPlayerName}`, `Now spinning: ${selectedPlayerName}`),
       description: t(`Koło ruszy po akcji gracza albo automatycznie za ${String(remainingSeconds)} s.`, `The wheel will start after the player's action or automatically in ${String(remainingSeconds)} s.`),
     };
   }

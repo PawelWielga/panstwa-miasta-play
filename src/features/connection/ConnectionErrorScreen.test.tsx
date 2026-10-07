@@ -5,6 +5,7 @@ import { ConnectionErrorScreen } from './ConnectionErrorScreen';
 import { connectionFailureCodes, localConnectionFailureCodes, type ConnectionFailureCode } from '../../protocol/connectionFailure';
 import { appActions, appState } from '../../test/fixtures';
 import { clearConnectionDiagnostics, recordConnectionDiagnostic } from '../../diagnostics/connectionDiagnostics';
+import { setLanguagePreference } from '../../i18n/appLanguage';
 
 const mocked = vi.hoisted(() => ({ value: {} as ReturnType<typeof createValue> }));
 function createValue(connectionError: ConnectionFailureCode = connectionFailureCodes.roomUnavailable) {
@@ -19,7 +20,10 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  setLanguagePreference('pl');
+  vi.restoreAllMocks();
+});
 
 it('maps an unreachable host to canonical copy and retry', async () => {
   mocked.value = createValue(connectionFailureCodes.roomUnavailable);
@@ -59,6 +63,25 @@ it('offers exactly language switch or exit for a language mismatch', async () =>
   expect(mocked.value.actions.changeLanguageAndRetry).toHaveBeenCalledWith('en');
   expect(mocked.value.actions.retry).not.toHaveBeenCalled();
   expect(mocked.value.actions.cancel).not.toHaveBeenCalled();
+});
+
+it('offers Polish switch or exit when an English client reaches a Polish room', async () => {
+  setLanguagePreference('en');
+  mocked.value = {
+    state: appState({
+      connectionStatus: 'error',
+      connectionError: localConnectionFailureCodes.languageMismatch,
+      requiredGameLanguageCode: 'pl',
+    }),
+    actions: appActions(),
+  };
+  render(<ConnectionErrorScreen />);
+
+  expect(screen.getByRole('heading', { name: 'This room requires Polish' })).toBeInTheDocument();
+  expect(screen.getAllByRole('button')).toHaveLength(2);
+  await userEvent.click(screen.getByRole('button', { name: 'Switch to Polish and join' }));
+  expect(mocked.value.actions.changeLanguageAndRetry).toHaveBeenCalledWith('pl');
+  expect(mocked.value.actions.retry).not.toHaveBeenCalled();
 });
 
 it('keeps a generic timeout separate from confirmed blocked P2P', async () => {
