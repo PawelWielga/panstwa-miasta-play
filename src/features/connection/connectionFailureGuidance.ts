@@ -108,6 +108,13 @@ export function getConnectionFailureGuidance(
       actionLabel: t('Wróć', 'Back'),
       hint: t('Zmień język albo wróć do ekranu dołączania.', 'Change the language or return to the join screen.'),
     },
+    [localConnectionFailureCodes.reconnectSessionRejected]: {
+      title: t('Nie można wrócić do gry', 'Could not resume the game'),
+      message: t('Nie udało się przywrócić Twojego miejsca w tej rozgrywce. Wróć do ekranu dołączania.', 'Your previous place in this game could not be restored. Return to the join screen.'),
+      primaryAction: 'backToMenu',
+      actionLabel: t('Wróć do dołączania', 'Back to join'),
+      hint: t('Jeśli gra nadal trwa, poproś prowadzącego o aktualny kod pokoju.', 'If the game is still running, ask the host for the current room code.'),
+    },
     [connectionFailureCodes.cancelled]: {
       title: t('Dołączanie anulowane', 'Join cancelled'),
       message: t('Próba dołączenia została anulowana.', 'The join attempt was cancelled.'),
