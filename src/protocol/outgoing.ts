@@ -6,13 +6,10 @@ import { isBoundedString, parseSubmissionAnswers } from './validation';
 
 export interface IdentityCredentials { profile: PlayerProfile; reconnectToken: string }
 
-// The web interface currently supports Polish only. Never infer this from a snapshot.
-const appLanguageCode = 'pl' as const;
-
 function meta(playerId: string, withRequestId = true): { senderId: string; sentAt: number; requestId?: string } {
   return { senderId: playerId, sentAt: Date.now(), ...(withRequestId ? { requestId: generateRequestId() } : {}) };
 }
-export function createPlayerHello(identity: IdentityCredentials): ClientMessage {
+export function createPlayerHello(identity: IdentityCredentials, appLanguageCode: 'pl' | 'en' = 'pl'): ClientMessage {
   return { type: 'player:hello', appLanguageCode, protocolVersion: SUPPORTED_GAME_PROTOCOL_VERSION, reconnectToken: identity.reconnectToken, player: identity.profile, ...meta(identity.profile.id) };
 }
 export function createGameReady(playerId: string, ready: boolean): ClientMessage { return { type: 'game:ready', ready, ...meta(playerId) }; }
@@ -38,7 +35,7 @@ export function createRoomClosedAcknowledgement(
 export function createClientLeave(playerId: string, roomId: string, hostSessionId: string): ClientLeaveMessage {
   return { type: 'client:leave', roomId, hostSessionId, playerId, ...meta(playerId) };
 }
-export function createRejoin(profile: PlayerProfile, lastSeenSequenceNumber: number): ClientMessage {
+export function createRejoin(profile: PlayerProfile, lastSeenSequenceNumber: number, appLanguageCode: 'pl' | 'en' = 'pl'): ClientMessage {
   return { type: 'client:rejoin', appLanguageCode, protocolVersion: SUPPORTED_GAME_PROTOCOL_VERSION, player: profile, lastSeenSequenceNumber, ...meta(profile.id) };
 }
 export function createSubmit(profile: PlayerProfile, answers: Record<string, string>): CountriesCitiesSubmitMessage {

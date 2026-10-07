@@ -37,6 +37,7 @@ export interface AppState {
   gameId: string | null;
   notice: string | null;
   hostClosedRoom: boolean;
+  requiredGameLanguageCode: 'pl' | 'en' | null;
 }
 
 export type AppAction =
@@ -60,6 +61,7 @@ export function createInitialState(identity: PlayerIdentity, joinParameters: Joi
     reviewSubmissions: [], reviewCategoryIndex: 0, revealResults: {}, roundScores: {}, finalScores: {},
     answers: {}, answersSubmitted: false, hasLocalAnswerDraft: false, localReady: false, pendingWheelSpinRequestKey: null,
     lastHostActivityAt: 0, lastSeenSequenceNumber: 0, gameId: null, notice: null, hostClosedRoom: false,
+    requiredGameLanguageCode: null,
   };
 }
 
@@ -71,7 +73,12 @@ export function gameReducer(state: AppState, action: AppAction): AppState {
       ...createInitialState(action.identity, action.parameters),
       lastSeenSequenceNumber: action.lastSeenSequenceNumber,
     };
-    case 'connection': return { ...state, connectionStatus: action.status, connectionError: action.error ?? null };
+    case 'connection': return {
+      ...state,
+      connectionStatus: action.status,
+      connectionError: action.error ?? null,
+      requiredGameLanguageCode: action.error === 'language_mismatch' ? state.requiredGameLanguageCode : null,
+    };
     case 'answer': return { ...state, answers: { ...state.answers, [action.categoryId]: action.value }, hasLocalAnswerDraft: true };
     case 'restore-draft': return { ...state, answers: { ...action.answers }, hasLocalAnswerDraft: true };
     case 'submitted': return { ...state, answersSubmitted: action.value };
@@ -88,7 +95,15 @@ function reduceHostMessage(state: AppState, message: HostMessage, receivedAt: nu
   switch (message.type) {
     case 'room:players': return { ...active, players: message.players };
     case 'game:error': return isTerminalJoinError(message)
-      ? { ...active, connectionStatus: 'error', connectionError: connectionFailureCodeForGameError(message.code), notice: null }
+      ? {
+          ...active,
+          connectionStatus: 'error',
+          connectionError: connectionFailureCodeForGameError(message.code),
+          requiredGameLanguageCode: message.code === 'language_mismatch'
+            ? message.gameLanguageCode ?? null
+            : null,
+          notice: null,
+        }
       : { ...active, notice: message.message };
     case 'host:heartbeat': return { ...active, gameId: message.gameId, lastSeenSequenceNumber: Math.max(state.lastSeenSequenceNumber, message.sequenceNumber) };
     case 'host:room-closed': return { ...active, gameId: message.gameId, connectionStatus: 'closed', connectionError: null, notice: null, hostClosedRoom: true };

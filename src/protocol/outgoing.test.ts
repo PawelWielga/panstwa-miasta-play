@@ -27,6 +27,15 @@ describe('outgoing protocol version', () => {
       protocolVersion: SUPPORTED_GAME_PROTOCOL_VERSION,
     });
   });
+
+  it('sends the selected English application language for join and reconnect', () => {
+    expect(createPlayerHello({ profile, reconnectToken: 'reconnect-token' }, 'en')).toMatchObject({
+      appLanguageCode: 'en',
+    });
+    expect(createRejoin(profile, 7, 'en')).toMatchObject({
+      appLanguageCode: 'en',
+    });
+  });
 });
 
 describe('graceful host shutdown acknowledgement', () => {

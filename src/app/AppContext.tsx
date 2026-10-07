@@ -27,6 +27,13 @@ import { isPeerJsAuthenticationError, PeerJsGameTransport } from '../peer/PeerJs
 import { canAutoReconnect, reconnectDelay } from '../peer/reconnectPolicy';
 import type { GameTransport, TransportState } from '../peer/transport';
 import type { JoinParameters } from '../features/connection/joinParams';
+import {
+  changeLockedAppLanguage,
+  getEffectiveAppLanguageCode,
+  lockAppLanguage,
+  unlockAppLanguage,
+  type SupportedLanguage,
+} from '../i18n/appLanguage';
 import { createInitialState, gameReducer, type AppState } from '../state/gameStore';
 import { loadPlayerIdentity, savePlayerIdentity, updatePlayerIdentity, type PlayerIdentity, type StoredPlayerIdentity } from '../storage/playerIdentityStorage';
 import {
@@ -65,6 +72,7 @@ export interface AppActions {
   returnToMain: () => void;
   leaveGame: () => void;
   retry: () => void;
+  changeLanguageAndRetry: (language: SupportedLanguage) => void;
   toggleReady: () => void;
   startWheelSpinHold: () => void;
   cancelWheelSpinHold: () => void;
@@ -85,6 +93,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
   const stateRef = useRef(state);
   const transportRef = useRef<GameTransport | null>(null);
   const sessionLeaseRef = useRef<SessionTabLease | null>(null);
+  const sessionLanguageRef = useRef<SupportedLanguage>(getEffectiveAppLanguageCode());
   const reconnectRef = useRef({
     startedAt: 0,
     attempt: 0,
@@ -463,10 +472,15 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       current.terminalJoinRejected = true;
       window.clearTimeout(current.timer);
       current.timer = 0;
-      clearAnswerDraftForState(stateRef.current);
+      if (message.code !== 'language_mismatch') {
+        clearAnswerDraftForState(stateRef.current);
+        removeCurrentUnfinishedSession();
+      }
       releaseSessionLease();
-      removeCurrentUnfinishedSession();
-      recordConnectionDiagnostic('join.rejected', 'warning', { code: message.code });
+      recordConnectionDiagnostic('join.rejected', 'warning', {
+        code: message.code,
+        gameLanguageCode: message.gameLanguageCode ?? null,
+      });
       transportRef.current?.close();
     } else {
       if (!lifecycle.admitted && hostMessageAdmitsPlayer(message, stateRef.current.identity.playerId)) {
@@ -613,14 +627,14 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         transport.send(createPlayerHello({
           profile: currentState.identity.profile,
           reconnectToken: currentState.identity.reconnectToken,
-        }));
+        }, sessionLanguageRef.current));
         recordConnectionDiagnostic('client-message.send', 'info', {
           connectionAttemptId,
           messageType: 'player:hello',
           trigger: 'transport-open',
         });
         if (reconnecting || current.everConnected) {
-          transport.send(createRejoin(currentState.identity.profile, currentState.lastSeenSequenceNumber));
+          transport.send(createRejoin(currentState.identity.profile, currentState.lastSeenSequenceNumber, sessionLanguageRef.current));
           recordConnectionDiagnostic('client-message.send', 'info', {
             connectionAttemptId,
             messageType: 'client:rejoin',
@@ -738,6 +752,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     }
 
     clearConnectionDiagnostics();
+    sessionLanguageRef.current = lockAppLanguage();
     const previousParameters = stateRef.current.joinParameters;
     if (previousParameters
       && (previousParameters.roomId !== parameters.roomId
@@ -810,6 +825,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     transportRef.current = null;
     transport?.close();
     releaseSessionLease();
+    unlockAppLanguage();
     dispatch({ type: 'connection', status: 'closed' });
   }, [releaseSessionLease]);
 
@@ -856,6 +872,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     wheelSpinHoldRef.current = null;
     transport?.close();
     releaseSessionLease();
+    unlockAppLanguage();
     stateRef.current = createInitialState(currentState.identity, null);
     dispatch({ type: 'return-to-main' });
   }, [clearAnswerDraftForState, releaseSessionLease, removeCurrentUnfinishedSession]);
@@ -891,6 +908,31 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     current.manuallyClosed = false;
     void connectInternal(parameters, true);
   }, [connectInternal, ensureSessionLease]);
+
+  const changeLanguageAndRetry = useCallback((language: SupportedLanguage): void => {
+    const currentState = stateRef.current;
+    const parameters = currentState.joinParameters;
+    if (currentState.connectionError !== localConnectionFailureCodes.languageMismatch
+      || currentState.requiredGameLanguageCode !== language
+      || parameters === null) return;
+
+    changeLockedAppLanguage(language);
+    sessionLanguageRef.current = language;
+    const current = reconnectRef.current;
+    current.terminalJoinRejected = false;
+    current.manuallyClosed = false;
+    current.startedAt = 0;
+    current.attempt = 0;
+    window.clearTimeout(current.timer);
+    current.timer = 0;
+    connectionAttemptRef.current.currentId = null;
+    connectionAttemptRef.current.inFlight = null;
+    recordConnectionDiagnostic('language-mismatch.accepted', 'info', {
+      roomId: parameters.roomId,
+      appLanguageCode: language,
+    });
+    void connectInternal(parameters, true);
+  }, [connectInternal]);
 
   useEffect(() => {
     const verifyLease = (): void => {
@@ -1009,6 +1051,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     returnToMain,
     leaveGame,
     retry,
+    changeLanguageAndRetry,
     toggleReady: () => {
       const next = !stateRef.current.localReady;
       send(createGameReady(stateRef.current.identity.playerId, next));
