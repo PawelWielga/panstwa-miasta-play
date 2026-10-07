@@ -927,12 +927,13 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     current.timer = 0;
     connectionAttemptRef.current.currentId = null;
     connectionAttemptRef.current.inFlight = null;
+    if (!ensureSessionLease(parameters)) return;
     recordConnectionDiagnostic('language-mismatch.accepted', 'info', {
       roomId: parameters.roomId,
       appLanguageCode: language,
     });
     void connectInternal(parameters, true);
-  }, [connectInternal]);
+  }, [connectInternal, ensureSessionLease]);
 
   useEffect(() => {
     const verifyLease = (): void => {
