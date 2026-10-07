@@ -504,8 +504,7 @@ describe('AppProvider connection lifecycle', () => {
     act(() => { actions.retry(); });
     expect(transports).toHaveLength(2);
 
-    let retryPromise!: Promise<void>;
-    retryPromise = getTransport(transports, 1).connect.mock.results[0]?.value as Promise<void>;
+    const retryPromise = getTransport(transports, 1).connect.mock.results[0]?.value as Promise<void>;
     await act(async () => {
       getTransport(transports, 1).open();
       await retryPromise;
