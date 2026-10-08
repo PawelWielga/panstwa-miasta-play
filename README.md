@@ -138,16 +138,46 @@ W aktualnym protokole wyłącznie host Android może oceniać odpowiedzi oraz ko
 
 ## GitHub Pages
 
-Workflow `.github/workflows/pages.yml` po pushu do `main`:
+Workflow `.github/workflows/pages.yml` po pushu do `dev` lub `main`:
 
-1. wykonuje `npm ci`,
-2. uruchamia lint,
-3. uruchamia sprawdzanie typów,
-4. uruchamia testy,
-5. buduje `dist`,
-6. publikuje artefakt przez oficjalne GitHub Pages Actions.
+1. pobiera źródła `main` i `dev`,
+2. instaluje zależności i buduje obie wersje do `dist-pages`,
+3. publikuje artefakt przez oficjalne GitHub Pages Actions,
+4. sprawdza HTML i JavaScript produkcji oraz wersji DEV.
 
-### Ścieżka bazowa Vite
+### Wersja testowa `/dev/`
+
+Paczka Pages zawiera dwie niezależne wersje klienta:
+
+- `/panstwa-miasta-play/` — kod z `main`,
+- `/panstwa-miasta-play/dev/` — kod z `dev`.
+
+Dla własnej domeny z `VITE_BASE_PATH=/` są to odpowiednio `/` i `/dev/`.
+Build wersji testowej nie scala `dev` do `main` i nie zastępuje produkcji kodem z `dev`.
+Workflow `pages.yml` publikuje obie wersje po pushu. Osobny workflow CI może
+pozostać wyłączony; publikacja wykonuje build i sprawdza dostępność obu adresów.
+Reguła środowiska GitHub `github-pages` musi dopuszczać branch `dev`.
+Po przyszłym scaleniu do `main` ten sam workflow zachowa `/dev/` także przy
+publikacji z `main`; starszy workflow na `main` nie zawiera jeszcze tej obsługi.
+
+Lokalne przygotowanie identycznej paczki (na branchu `dev`):
+
+```bash
+git fetch origin main:refs/remotes/origin/main
+npm run build:pages
+```
+
+Wynik znajduje się w `dist-pages/`, a `deployment.json` zapisuje rewizje obu
+branchy i informację o lokalnych zmianach. Na Windows wymagany jest Docker
+Desktop z kontenerami Linux: obecny `main` ma nazwy plików różniące się tylko
+wielkością liter, dlatego produkcja buduje się wewnątrz kontenera Node 22.
+Źródła `main` pozostają niezmienione.
+
+Android debug domyślnie generuje zaproszenia i QR do `/dev/`.
+Release do testów wymaga `--dart-define=APP_ENVIRONMENT=dev`.
+`ONLINE_WEB_CLIENT_URL` nadpisuje cały adres, razem ze ścieżką.
+
+### Zwykły build jednej wersji
 
 Dla własnej domeny:
 
