@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -50,14 +50,31 @@ try {
     run(process.execPath, [npmCli, 'ci'], production);
     run(process.execPath, [npmCli, 'run', 'build'], production, { ...process.env, VITE_BASE_PATH: base });
   }
-  run(process.execPath, [npmCli, 'ci']);
-  run(process.execPath, [npmCli, 'run', 'build'], root, { ...process.env, VITE_BASE_PATH: `${base}dev/` });
+  const flutterDev = join(root, 'flutter-dev');
+  let flutterDevSource = null;
+  if (existsSync(flutterDev)) {
+    flutterDevSource = JSON.parse(readFileSync(join(flutterDev, 'source.json'), 'utf8'));
+    if (flutterDevSource.repository !== 'PawelWielga/panstwa-miasta'
+      || !/^[a-f0-9]{40}$/.test(flutterDevSource.sha)
+      || flutterDevSource.environment !== 'dev') {
+      throw new Error('Invalid Flutter DEV source metadata.');
+    }
+    const html = readFileSync(join(flutterDev, 'index.html'), 'utf8');
+    if (!html.includes(`href="${base}dev/"`)
+      || !existsSync(join(flutterDev, 'flutter_bootstrap.js'))
+      || !existsSync(join(flutterDev, 'main.dart.js'))) {
+      throw new Error('Flutter DEV build is missing files or has the wrong base href.');
+    }
+  } else {
+    run(process.execPath, [npmCli, 'ci']);
+    run(process.execPath, [npmCli, 'run', 'build'], root, { ...process.env, VITE_BASE_PATH: `${base}dev/` });
+  }
 
   rmSync(output, { recursive: true, force: true });
   cpSync(join(production, 'dist'), output, { recursive: true });
-  cpSync(join(root, 'dist'), join(output, 'dev'), { recursive: true });
+  cpSync(flutterDevSource ? flutterDev : join(root, 'dist'), join(output, 'dev'), { recursive: true });
   writeFileSync(join(output, '.nojekyll'), '');
-  writeFileSync(join(output, 'deployment.json'), `${JSON.stringify({ main: mainSha, dev: devSha, devDirty }, null, 2)}\n`);
+  writeFileSync(join(output, 'deployment.json'), `${JSON.stringify({ main: mainSha, dev: devSha, devDirty, flutterDevSource }, null, 2)}\n`);
   console.log(`Pages bundle ready: ${output}\nProduction: ${base}\nPreview: ${base}dev/`);
 } finally {
   rmSync(temporary, { recursive: true, force: true });

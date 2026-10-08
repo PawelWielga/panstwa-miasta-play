@@ -21,6 +21,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      flutter_source_sha: ${{ steps.source.outputs.sha }}
 
     steps:
       - name: Checkout
@@ -48,6 +50,16 @@ jobs:
         with:
           path: dist-pages
 
+      - name: Read Flutter source revision
+        id: source
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+          const sha = existsSync('flutter-dev/source.json')
+            ? JSON.parse(readFileSync('flutter-dev/source.json', 'utf8')).sha : '';
+          appendFileSync(process.env.GITHUB_OUTPUT, `sha=${sha}\n`);
+          NODE
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -66,7 +78,7 @@ jobs:
         uses: actions/deploy-pages@v5
 
   verify:
-    needs: deploy
+    needs: [build, deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -84,6 +96,7 @@ jobs:
         env:
           PAGE_URL: ${{ needs.deploy.outputs.page_url }}
           GITHUB_TOKEN: ${{ github.token }}
+          FLUTTER_SOURCE_SHA: ${{ needs.build.outputs.flutter_source_sha }}
         run: |
           node <<'NODE'
           const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -105,8 +118,9 @@ jobs:
               }
 
               const html = await pageResponse.text();
-              if (!html.includes('id="root"')) {
-                throw new Error('HTML does not contain the React root element');
+              const isFlutterDev = url.endsWith('/dev/') && Boolean(process.env.FLUTTER_SOURCE_SHA);
+              if (isFlutterDev ? !html.includes('flutter_bootstrap.js') : !html.includes('id="root"')) {
+                throw new Error('HTML does not contain the expected application entrypoint');
               }
 
               const scriptMatch = html.match(/<script[^>]+src=["']([^"']+\.js)["']/i);
@@ -118,6 +132,16 @@ jobs:
               const assetResponse = await fetch(assetUrl, { redirect: 'follow' });
               if (!assetResponse.ok) {
                 throw new Error(`JavaScript bundle returned HTTP ${assetResponse.status}`);
+              }
+              if (isFlutterDev) {
+                const sourceResponse = await fetch(new URL(`source.json?sha=${process.env.FLUTTER_SOURCE_SHA}`, url));
+                if (!sourceResponse.ok || (await sourceResponse.json()).sha !== process.env.FLUTTER_SOURCE_SHA) {
+                  throw new Error('Published Flutter DEV source revision does not match the build');
+                }
+                const mainResponse = await fetch(new URL('main.dart.js', url));
+                if (!mainResponse.ok || mainResponse.headers.get('content-type')?.includes('text/html')) {
+                  throw new Error('Flutter DEV main.dart.js is unavailable');
+                }
               }
               }
 
