@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../app/AppContext';
+import { useI18n } from '../i18n/appLanguage';
 
 export function RoundStatusBar() {
   const { state } = useApp();
+  const { t } = useI18n();
   const snapshot = state.snapshot;
   const round = snapshot?.round;
   const deadlineAt = snapshot?.phase === 'answering' ? state.deadlineAt : null;
@@ -18,10 +20,10 @@ export function RoundStatusBar() {
   const remainingSeconds = deadlineAt === null ? null : Math.max(0, Math.ceil((deadlineAt - now) / 1000));
   const letter = state.currentLetter ?? round?.letter ?? '?';
 
-  return <div className="round-status-bar" aria-label="Stan rundy">
-    {round?.number !== undefined && totalRounds !== undefined ? <StatusPill label="Runda" value={`${String(round.number)}/${String(totalRounds)}`} /> : null}
-    <StatusPill label="Litera" value={letter.toUpperCase()} />
-    {remainingSeconds !== null ? <StatusPill label="Czas" value={formatRemainingTime(remainingSeconds)} /> : null}
+  return <div className="round-status-bar" aria-label={t('Stan rundy', 'Round status')}>
+    {round?.number !== undefined && totalRounds !== undefined ? <StatusPill label={t('Runda', 'Round')} value={`${String(round.number)}/${String(totalRounds)}`} /> : null}
+    <StatusPill label={t('Litera', 'Letter')} value={letter.toUpperCase()} />
+    {remainingSeconds !== null ? <StatusPill label={t('Czas', 'Time')} value={formatRemainingTime(remainingSeconds)} /> : null}
   </div>;
 }
 

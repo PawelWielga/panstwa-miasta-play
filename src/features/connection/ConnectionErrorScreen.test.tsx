@@ -5,6 +5,7 @@ import { ConnectionErrorScreen } from './ConnectionErrorScreen';
 import { connectionFailureCodes, localConnectionFailureCodes, type ConnectionFailureCode } from '../../protocol/connectionFailure';
 import { appActions, appState } from '../../test/fixtures';
 import { clearConnectionDiagnostics, recordConnectionDiagnostic } from '../../diagnostics/connectionDiagnostics';
+import { setLanguagePreference } from '../../i18n/appLanguage';
 
 const mocked = vi.hoisted(() => ({ value: {} as ReturnType<typeof createValue> }));
 function createValue(connectionError: ConnectionFailureCode = connectionFailureCodes.roomUnavailable) {
@@ -19,7 +20,10 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  setLanguagePreference('pl');
+  vi.restoreAllMocks();
+});
 
 it('maps an unreachable host to canonical copy and retry', async () => {
   mocked.value = createValue(connectionFailureCodes.roomUnavailable);
@@ -41,6 +45,45 @@ it('asks for the code again when the invitation is invalid', async () => {
   expect(mocked.value.actions.retry).not.toHaveBeenCalled();
 });
 
+it('offers exactly language switch or exit for a language mismatch', async () => {
+  mocked.value = {
+    state: appState({
+      connectionStatus: 'error',
+      connectionError: localConnectionFailureCodes.languageMismatch,
+      requiredGameLanguageCode: 'en',
+    }),
+    actions: appActions(),
+  };
+  render(<ConnectionErrorScreen />);
+
+  expect(screen.getByRole('heading', { name: 'Ten pokój wymaga języka angielskiego' })).toBeInTheDocument();
+  const buttons = screen.getAllByRole('button');
+  expect(buttons).toHaveLength(2);
+  await userEvent.click(screen.getByRole('button', { name: 'Zmień na angielski i dołącz' }));
+  expect(mocked.value.actions.changeLanguageAndRetry).toHaveBeenCalledWith('en');
+  expect(mocked.value.actions.retry).not.toHaveBeenCalled();
+  expect(mocked.value.actions.cancel).not.toHaveBeenCalled();
+});
+
+it('offers Polish switch or exit when an English client reaches a Polish room', async () => {
+  setLanguagePreference('en');
+  mocked.value = {
+    state: appState({
+      connectionStatus: 'error',
+      connectionError: localConnectionFailureCodes.languageMismatch,
+      requiredGameLanguageCode: 'pl',
+    }),
+    actions: appActions(),
+  };
+  render(<ConnectionErrorScreen />);
+
+  expect(screen.getByRole('heading', { name: 'This room requires Polish' })).toBeInTheDocument();
+  expect(screen.getAllByRole('button')).toHaveLength(2);
+  await userEvent.click(screen.getByRole('button', { name: 'Switch to Polish and join' }));
+  expect(mocked.value.actions.changeLanguageAndRetry).toHaveBeenCalledWith('pl');
+  expect(mocked.value.actions.retry).not.toHaveBeenCalled();
+});
+
 it('keeps a generic timeout separate from confirmed blocked P2P', async () => {
   mocked.value = createValue(connectionFailureCodes.connectionTimeout);
   render(<ConnectionErrorScreen />);
@@ -59,6 +102,18 @@ it('maps blocked P2P to the change-network recovery', async () => {
   expect(screen.getByRole('heading', { name: 'Ta sieć blokuje grę' })).toBeInTheDocument();
   expect(screen.getByText('Nie udało się nawiązać bezpośredniego połączenia z prowadzącym. Ta sieć blokuje grę przez internet.')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Wróć i zmień sieć' }));
+  expect(mocked.value.actions.cancel).toHaveBeenCalled();
+  expect(mocked.value.actions.retry).not.toHaveBeenCalled();
+});
+
+it('explains a rejected restored session without blaming the room code', async () => {
+  mocked.value = createValue(localConnectionFailureCodes.reconnectSessionRejected);
+  render(<ConnectionErrorScreen />);
+
+  expect(screen.getByRole('heading', { name: 'Nie można wrócić do gry' })).toBeInTheDocument();
+  expect(screen.getByText('Nie udało się przywrócić Twojego miejsca w tej rozgrywce. Wróć do ekranu dołączania.')).toBeInTheDocument();
+  expect(screen.queryByText(/Kod lub dane pokoju są nieprawidłowe/)).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Wróć do dołączania' }));
   expect(mocked.value.actions.cancel).toHaveBeenCalled();
   expect(mocked.value.actions.retry).not.toHaveBeenCalled();
 });

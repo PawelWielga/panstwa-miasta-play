@@ -1,7 +1,7 @@
 import { act, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CountriesCitiesWheelState } from '../../protocol/messages';
-import { FortuneWheel } from './FortuneWheel';
+import { FortuneWheel } from './FortuneWheelView';
 
 const spinningState: CountriesCitiesWheelState = {
   schemaVersion: 1,

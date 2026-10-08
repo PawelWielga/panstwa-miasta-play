@@ -7,6 +7,7 @@ import {
   wheelSpinProgress,
 } from './fortuneWheel';
 import './FortuneWheel.css';
+import { useI18n } from '../../i18n/appLanguage';
 
 interface FortuneWheelProps {
   wheelState: CountriesCitiesWheelState;
@@ -15,6 +16,7 @@ interface FortuneWheelProps {
 }
 
 export function FortuneWheel({ wheelState, usedLetters = [], now = Date.now }: FortuneWheelProps) {
+  const { t } = useI18n();
   const reducedMotion = useReducedMotion();
   const currentTime = useWheelClock(wheelState, reducedMotion, now);
   const segments: readonly string[] = wheelState.letterPool?.length
@@ -38,7 +40,7 @@ export function FortuneWheel({ wheelState, usedLetters = [], now = Date.now }: F
     <div
       className="fortune-wheel"
       role="img"
-      aria-label={revealedLetter ? `Koło fortuny. Wylosowana litera ${revealedLetter}.` : 'Koło fortuny. Wynik jest ukryty.'}
+      aria-label={revealedLetter ? `${t('Koło fortuny. Wylosowana litera', 'Fortune wheel. Drawn letter')} ${revealedLetter}.` : t('Koło fortuny. Wynik jest ukryty.', 'Fortune wheel. The result is hidden.')}
       data-testid="fortune-wheel"
       data-spin-id={wheelState.spinId}
     >

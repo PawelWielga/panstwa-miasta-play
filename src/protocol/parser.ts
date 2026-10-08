@@ -34,7 +34,7 @@ export function parseHostMessage(data: unknown): HostMessageParseResult {
     }
     case 'game:reset': case 'game:start': return ok({ type: data.type, ...metadata });
     case 'game:error':
-      return typeof data.message === 'string' && (data.code === undefined || typeof data.code === 'string') ? ok({ type: data.type, message: data.message, ...(typeof data.code === 'string' ? { code: data.code } : {}), ...metadata }) : invalid();
+      return typeof data.message === 'string' && (data.code === undefined || typeof data.code === 'string') ? ok({ type: data.type, message: data.message, ...(typeof data.code === 'string' ? { code: data.code } : {}), ...(data.gameLanguageCode === 'pl' || data.gameLanguageCode === 'en' ? { gameLanguageCode: data.gameLanguageCode } : {}), ...metadata }) : invalid();
     case 'host:heartbeat':
       return typeof data.gameId === 'string' && isInteger(data.sequenceNumber) ? ok({ type: data.type, gameId: data.gameId, sequenceNumber: data.sequenceNumber, ...metadata }) : invalid();
     case 'host:room-closed':

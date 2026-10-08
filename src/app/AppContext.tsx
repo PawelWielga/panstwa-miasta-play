@@ -27,6 +27,13 @@ import { isPeerJsAuthenticationError, PeerJsGameTransport } from '../peer/PeerJs
 import { canAutoReconnect, reconnectDelay } from '../peer/reconnectPolicy';
 import type { GameTransport, TransportState } from '../peer/transport';
 import type { JoinParameters } from '../features/connection/joinParams';
+import {
+  changeLockedAppLanguage,
+  getEffectiveAppLanguageCode,
+  lockAppLanguage,
+  unlockAppLanguage,
+  type SupportedLanguage,
+} from '../i18n/appLanguage';
 import { createInitialState, gameReducer, type AppState } from '../state/gameStore';
 import { loadPlayerIdentity, savePlayerIdentity, updatePlayerIdentity, type PlayerIdentity, type StoredPlayerIdentity } from '../storage/playerIdentityStorage';
 import {
@@ -40,12 +47,20 @@ import {
   saveAnswerDraft,
   type AnswerDraftScope,
   type FrozenFinalizationResponse,
+  type StoredAnswerDraft,
 } from '../storage/answerDraftStorage';
 import {
   createSessionTabLease,
   sessionTabLeaseHeartbeatMs,
+  sessionTabLeaseStorageKey,
   type SessionTabLease,
 } from '../storage/sessionTabLease';
+
+import {
+  readPersistentAnswerDraft,
+  savePersistentAnswerDraft,
+  removePersistentAnswerDraftsForSession,
+} from '../storage/persistentAnswerDraftStorage';
 
 const UNFINISHED_SESSION_REFRESH_INTERVAL_MS = 60_000;
 const ANSWER_DRAFT_DEBOUNCE_MS = 200;
@@ -57,6 +72,7 @@ export interface AppActions {
   returnToMain: () => void;
   leaveGame: () => void;
   retry: () => void;
+  changeLanguageAndRetry: (language: SupportedLanguage) => void;
   toggleReady: () => void;
   startWheelSpinHold: () => void;
   cancelWheelSpinHold: () => void;
@@ -77,6 +93,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
   const stateRef = useRef(state);
   const transportRef = useRef<GameTransport | null>(null);
   const sessionLeaseRef = useRef<SessionTabLease | null>(null);
+  const sessionLanguageRef = useRef<SupportedLanguage>(getEffectiveAppLanguageCode());
   const reconnectRef = useRef({
     startedAt: 0,
     attempt: 0,
@@ -141,28 +158,60 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     };
   }, []);
 
+  const persistentDraftOptions = useCallback((scope: Pick<AnswerDraftScope, 'hostSessionId' | 'roomId' | 'playerId'>) => ({
+    isOwner: (): boolean => {
+      const lease = sessionLeaseRef.current;
+      return lease?.storageKey === sessionTabLeaseStorageKey(scope) && lease.isOwner();
+    },
+  }), []);
+
+  const saveScopedAnswerDraft = useCallback((draft: StoredAnswerDraft): void => {
+    saveAnswerDraft(draft);
+    const options = persistentDraftOptions(draft.scope);
+    if (!draft.frozenFinalization && Object.values(draft.answers).every((answer) => answer.trim() === '')) {
+      removePersistentAnswerDraftsForSession(draft.scope, options);
+    } else {
+      savePersistentAnswerDraft(draft, options);
+    }
+  }, [persistentDraftOptions]);
+
+  const readScopedAnswerDraft = useCallback((scope: AnswerDraftScope): StoredAnswerDraft | null => {
+    const persistent = readPersistentAnswerDraft(scope, persistentDraftOptions(scope));
+    return readAnswerDraft(scope) ?? persistent;
+  }, [persistentDraftOptions]);
+
+  const removePersistentSessionDraft = useCallback((current: AppState): void => {
+    const target = current.joinParameters;
+    if (!target) return;
+    const scope = { hostSessionId: target.hostSessionId, roomId: target.roomId, playerId: current.identity.playerId };
+    removePersistentAnswerDraftsForSession(scope, persistentDraftOptions(scope));
+  }, [persistentDraftOptions]);
+
   const flushCurrentAnswerDraft = useCallback((): void => {
     const current = stateRef.current;
     const scope = answerDraftScope(current);
-    if (!scope || current.snapshot?.phase !== 'answering') return;
+    if (!scope || current.snapshot?.phase !== 'answering'
+      || current.snapshot.donePlayerIds.includes(current.identity.playerId)
+      || current.snapshot.submissions[current.identity.playerId]) return;
     const frozen = frozenFinalizationRef.current;
     const matchingFrozen = frozen
       && frozen.gameId === scope.gameId
       && frozen.roundNumber === scope.roundNumber
       ? frozen
       : undefined;
-    saveAnswerDraft({ scope, answers: current.answers, ...(matchingFrozen ? { frozenFinalization: matchingFrozen } : {}) });
-  }, [answerDraftScope]);
+    saveScopedAnswerDraft({ scope, answers: current.answers, ...(matchingFrozen ? { frozenFinalization: matchingFrozen } : {}) });
+  }, [answerDraftScope, saveScopedAnswerDraft]);
 
   const clearAnswerDraftForState = useCallback((current: AppState): void => {
     const scope = answerDraftScope(current);
     if (scope) removeAnswerDraft(scope);
+    removePersistentSessionDraft(current);
     frozenFinalizationRef.current = null;
     seenFinalizationRef.current = null;
     legacyFallbackSentRef.current = null;
     window.clearTimeout(answerDraftTimerRef.current);
     answerDraftTimerRef.current = 0;
-  }, [answerDraftScope]);
+  }, [answerDraftScope, removePersistentSessionDraft]);
 
   const handleSnapshotAnswerLifecycle = useCallback((snapshot: GameSnapshot): Record<string, string> | null => {
     const current = stateRef.current;
@@ -185,11 +234,16 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       legacyFallbackSentRef.current = null;
     }
 
-    const stored = nextScope ? readAnswerDraft(nextScope) : null;
+    const stored = nextScope ? readScopedAnswerDraft(nextScope) : null;
+    const hostHasAnswers = snapshot.donePlayerIds.includes(playerId) || snapshot.submissions[playerId] !== undefined;
+    if (hostHasAnswers || snapshot.phase !== 'answering') {
+      removePersistentSessionDraft(current);
+      if (nextScope) removeAnswerDraft(nextScope);
+    }
     const sameCurrentRound = previousSnapshot?.gameId === snapshot.gameId
       && previousSnapshot.round?.number === snapshot.round?.number;
     const restorableAnswers = snapshot.phase === 'answering'
-      && !snapshot.donePlayerIds.includes(playerId)
+      && !hostHasAnswers
       && !current.hasLocalAnswerDraft
       ? stored?.answers ?? null
       : null;
@@ -197,7 +251,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     const finalization = snapshot.answerFinalization;
     if (finalization && nextScope && snapshot.phase === 'answering' && snapshot.round) {
       seenFinalizationRef.current = { gameId: snapshot.gameId, roundNumber: snapshot.round.number };
-      if (!snapshot.donePlayerIds.includes(playerId)) {
+      if (!hostHasAnswers) {
         const inMemory = frozenFinalizationRef.current;
         const storedFrozen = stored?.frozenFinalization;
         const existingFrozen = inMemory
@@ -230,7 +284,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
           };
           if (!frozen.requestId) throw new Error('Brak requestId finalizacji.');
           frozenFinalizationRef.current = frozen;
-          saveAnswerDraft({ scope: nextScope, answers: frozen.answers, frozenFinalization: frozen });
+          saveScopedAnswerDraft({ scope: nextScope, answers: frozen.answers, frozenFinalization: frozen });
           send(message);
         } catch (error) {
           recordConnectionDiagnostic('answer-finalization.prepare.failed', 'error', getDiagnosticErrorDetails(error));
@@ -249,7 +303,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         || previousStored?.frozenFinalization !== undefined;
       const fallbackKey = JSON.stringify([snapshot.gameId, snapshot.round?.number, playerId]);
       if (!finalizationWasSeen
-        && !snapshot.donePlayerIds.includes(playerId)
+        && !hostHasAnswers
         && legacyFallbackSentRef.current !== fallbackKey) {
         legacyFallbackSentRef.current = fallbackKey;
         const answers = current.hasLocalAnswerDraft ? current.answers : previousStored?.answers ?? current.answers;
@@ -270,7 +324,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     }
 
     return restorableAnswers;
-  }, [answerDraftScope, send]);
+  }, [answerDraftScope, send, readScopedAnswerDraft, saveScopedAnswerDraft, removePersistentSessionDraft]);
 
   const removeCurrentUnfinishedSession = useCallback((): void => {
     const currentState = stateRef.current;
@@ -384,8 +438,8 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       current.terminalJoinRejected = false;
       window.clearTimeout(current.timer);
       current.timer = 0;
-      releaseSessionLease();
       clearAnswerDraftForState(stateRef.current);
+      releaseSessionLease();
       removeCurrentUnfinishedSession();
       send(createRoomClosedAcknowledgement(
         stateRef.current.identity.playerId,
@@ -418,9 +472,15 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       current.terminalJoinRejected = true;
       window.clearTimeout(current.timer);
       current.timer = 0;
+      if (message.code !== 'language_mismatch') {
+        clearAnswerDraftForState(stateRef.current);
+        removeCurrentUnfinishedSession();
+      }
       releaseSessionLease();
-      removeCurrentUnfinishedSession();
-      recordConnectionDiagnostic('join.rejected', 'warning', { code: message.code });
+      recordConnectionDiagnostic('join.rejected', 'warning', {
+        code: message.code,
+        gameLanguageCode: message.gameLanguageCode ?? null,
+      });
       transportRef.current?.close();
     } else {
       if (!lifecycle.admitted && hostMessageAdmitsPlayer(message, stateRef.current.identity.playerId)) {
@@ -567,14 +627,14 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
         transport.send(createPlayerHello({
           profile: currentState.identity.profile,
           reconnectToken: currentState.identity.reconnectToken,
-        }));
+        }, sessionLanguageRef.current));
         recordConnectionDiagnostic('client-message.send', 'info', {
           connectionAttemptId,
           messageType: 'player:hello',
           trigger: 'transport-open',
         });
         if (reconnecting || current.everConnected) {
-          transport.send(createRejoin(currentState.identity.profile, currentState.lastSeenSequenceNumber));
+          transport.send(createRejoin(currentState.identity.profile, currentState.lastSeenSequenceNumber, sessionLanguageRef.current));
           recordConnectionDiagnostic('client-message.send', 'info', {
             connectionAttemptId,
             messageType: 'client:rejoin',
@@ -692,6 +752,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     }
 
     clearConnectionDiagnostics();
+    sessionLanguageRef.current = lockAppLanguage();
     const previousParameters = stateRef.current.joinParameters;
     if (previousParameters
       && (previousParameters.roomId !== parameters.roomId
@@ -764,6 +825,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     transportRef.current = null;
     transport?.close();
     releaseSessionLease();
+    unlockAppLanguage();
     dispatch({ type: 'connection', status: 'closed' });
   }, [releaseSessionLease]);
 
@@ -810,6 +872,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     wheelSpinHoldRef.current = null;
     transport?.close();
     releaseSessionLease();
+    unlockAppLanguage();
     stateRef.current = createInitialState(currentState.identity, null);
     dispatch({ type: 'return-to-main' });
   }, [clearAnswerDraftForState, releaseSessionLease, removeCurrentUnfinishedSession]);
@@ -843,6 +906,32 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     current.startedAt = 0;
     current.attempt = 0;
     current.manuallyClosed = false;
+    void connectInternal(parameters, true);
+  }, [connectInternal, ensureSessionLease]);
+
+  const changeLanguageAndRetry = useCallback((language: SupportedLanguage): void => {
+    const currentState = stateRef.current;
+    const parameters = currentState.joinParameters;
+    if (currentState.connectionError !== localConnectionFailureCodes.languageMismatch
+      || currentState.requiredGameLanguageCode !== language
+      || parameters === null) return;
+
+    changeLockedAppLanguage(language);
+    sessionLanguageRef.current = language;
+    const current = reconnectRef.current;
+    current.terminalJoinRejected = false;
+    current.manuallyClosed = false;
+    current.startedAt = 0;
+    current.attempt = 0;
+    window.clearTimeout(current.timer);
+    current.timer = 0;
+    connectionAttemptRef.current.currentId = null;
+    connectionAttemptRef.current.inFlight = null;
+    if (!ensureSessionLease(parameters)) return;
+    recordConnectionDiagnostic('language-mismatch.accepted', 'info', {
+      roomId: parameters.roomId,
+      appLanguageCode: language,
+    });
     void connectInternal(parameters, true);
   }, [connectInternal, ensureSessionLease]);
 
@@ -963,6 +1052,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
     returnToMain,
     leaveGame,
     retry,
+    changeLanguageAndRetry,
     toggleReady: () => {
       const next = !stateRef.current.localReady;
       send(createGameReady(stateRef.current.identity.playerId, next));
@@ -1034,7 +1124,7 @@ export function AppProvider({ children, transportFactory = () => new PeerJsGameT
       dispatch({ type: 'submitted', value: false });
     },
     clearNotice: () => dispatch({ type: 'clear-notice' }),
-  }), [cancel, connect, flushCurrentAnswerDraft, leaveGame, retry, returnToMain, send, updateIdentityAction]);
+  }), [cancel, changeLanguageAndRetry, connect, flushCurrentAnswerDraft, leaveGame, retry, returnToMain, send, updateIdentityAction]);
 
   return <AppContext.Provider value={{ state, actions }}>{children}</AppContext.Provider>;
 }

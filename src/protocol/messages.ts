@@ -136,6 +136,7 @@ export interface GameErrorMessage extends MessageMetadata {
   type: 'game:error';
   message: string;
   code?: string;
+  gameLanguageCode?: 'pl' | 'en';
 }
 export interface HostHeartbeatMessage extends MessageMetadata {
   type: 'host:heartbeat';
@@ -187,6 +188,7 @@ export type HostMessage =
   | CountriesCitiesReviewReadyMessage | CountriesCitiesRevealMessage | CountriesCitiesResultsMessage;
 
 export interface PlayerHelloMessage extends MessageMetadata {
+  appLanguageCode: 'pl' | 'en';
   type: 'player:hello'; protocolVersion: number; reconnectToken: string; player: PlayerProfile;
 }
 export interface GameReadyMessage extends MessageMetadata { type: 'game:ready'; ready: boolean }
@@ -200,6 +202,7 @@ export interface ClientLeaveMessage extends MessageMetadata {
   type: 'client:leave'; roomId: string; hostSessionId: string; playerId: string;
 }
 export interface ClientRejoinMessage extends MessageMetadata {
+  appLanguageCode: 'pl' | 'en';
   type: 'client:rejoin'; protocolVersion: number; player: PlayerProfile; lastSeenSequenceNumber: number;
 }
 export interface CountriesCitiesSubmitMessage extends MessageMetadata {

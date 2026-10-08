@@ -1,17 +1,19 @@
 import type { CountriesCitiesAnswerResult, CountriesCitiesSubmission, GameCategory } from '../protocol/messages';
+import { useI18n } from '../i18n/appLanguage';
 
 export function CategoryResultsList({ category, submissions, results, ownPlayerId }: { category: GameCategory | undefined; submissions: CountriesCitiesSubmission[]; results: Record<string, CountriesCitiesAnswerResult>; ownPlayerId: string }) {
-  if (!category) return <p>Brak wyników do pokazania.</p>;
+  const { t } = useI18n();
+  if (!category) return <p>{t('Brak wyników do pokazania.', 'No results to show.')}</p>;
   return <div className="category-results-view">
-    <div className="category-results-header"><span>Kategoria:</span><strong>{category.name}</strong></div>
+    <div className="category-results-header"><span>{t('Kategoria:', 'Category:')}</span><strong>{category.name}</strong></div>
     <div className="category-results-list">{submissions.map((submission) => {
       const result = resultFor(results, submission.playerId, category.id);
       const answer = submission.answers[category.id] ?? submission.answers[category.name] ?? '';
       const points = result?.points ?? 0;
       const resultTone = answer.trim() === '' || result?.winner === 'wrong' ? 'error' : result?.winner === 'duplicate' ? 'warning' : 'success';
       return <div className={`category-result-card result-${resultTone}${submission.playerId === ownPlayerId ? ' is-me' : ''}`} key={submission.playerId}>
-        <div><strong>{submission.playerName}</strong><span className={points > 0 ? 'result-points positive' : 'result-points'}>{points > 0 ? '+' : ''}{String(points)} pkt</span></div>
-        <span className={answer.trim() === '' ? 'category-answer empty' : 'category-answer'}>{answer.trim() === '' ? 'Brak odpowiedzi' : answer}</span>
+        <div><strong>{submission.playerName}</strong><span className={points > 0 ? 'result-points positive' : 'result-points'}>{points > 0 ? '+' : ''}{String(points)} {t('pkt', 'pts')}</span></div>
+        <span className={answer.trim() === '' ? 'category-answer empty' : 'category-answer'}>{answer.trim() === '' ? t('Brak odpowiedzi', 'No answer') : answer}</span>
       </div>;
     })}</div>
   </div>;

@@ -4,7 +4,7 @@
 
 Klient WWW przechowuje minimalny kontekst niedokończonej rozgrywki, aby po odświeżeniu lub ponownym otwarciu karty można było wrócić do tego samego slotu gracza bez tworzenia duplikatu.
 
-Kontrakt hosta Android pozostaje źródłem prawdy. Storage WWW nie przechowuje stanu gry, odpowiedzi ani lokalnego czasu rundy. Po wznowieniu klient musi odtworzyć ekran wyłącznie z aktualnego snapshotu hosta.
+Kontrakt hosta Android pozostaje źródłem prawdy. Storage WWW nie przechowuje stanu gry ani lokalnego czasu rundy. Niewysłane odpowiedzi są osobnym draftem, którego przywrócenie wymaga potwierdzenia przez hosta aktualnej sesji i rundy. Po wznowieniu klient musi odtworzyć ekran wyłącznie z aktualnego snapshotu hosta.
 
 ## Zakres danych
 
@@ -36,10 +36,21 @@ Brak `localStorage` nie może blokować zwykłego dołączenia. W takim przypadk
 - Jawne opuszczenie gry usuwa rekord.
 - Trwałe odrzucenie readmission, niezgodna sesja hosta albo nieprawidłowe uwierzytelnienie usuwa rekord.
 - Błędy przejściowe, utrata sieci, uśpienie Safari i timeout nie usuwają rekordu.
-- Pełne odpowiedzi gracza nie są zapisywane w tej wersji. Po readmission hostowy snapshot odtwarza odpowiedzi już wysłane; lokalny niewysłany draft może zniknąć po zamknięciu karty.
+- Odpowiedzi już przyjęte przez hosta mają pierwszeństwo przed lokalnym draftem.
 
 ## Świadome opuszczenie gry
 
 Akcja „Opuść grę” usuwa zapis niedokończonej sesji tylko dla aktualnego pokoju i gracza, czyści draft bieżącej rundy i zamyka transport po best-effort `client:leave`. Trwała tożsamość gracza pozostaje zachowana. Zwykły reload, `pagehide`, przejście Safari w tło, utrata sieci lub DataChannel nie wykonują tego cleanupu, dzięki czemu „Wróć” nadal może wznowić przerwaną sesję.
 
 Cleanup świadomego wyjścia jest idempotentny: ponowne wywołanie po przejściu do ekranu dołączania nie wysyła kolejnego `client:leave` i nie uruchamia reconnectu.
+## Niewysłane odpowiedzi po zamknięciu karty
+
+Draft w `sessionStorage` i trwały draft w `localStorage` korzystają z tego samego modelu i walidacji. Store `panstwa-miasta.persistent-answer-drafts.v1` przechowuje maksymalnie 8 rekordów, 128 000 znaków łącznie, z TTL 24 godziny i tolerancją przyszłego czasu 5 minut. Rekord wiąże odpowiedzi z `hostSessionId`, pokojem, `playerId`, `gameId` i numerem rundy. Zachowuje także zamrożoną odpowiedź finalizacji wraz z jej identyfikatorem żądania.
+
+Otwarcie transportu lub odczyt kontekstu reconnect nie przywraca odpowiedzi. Dopiero zaakceptowany, aktualny snapshot hosta dla tego gracza i tej samej rundy może odtworzyć niewysłany draft. Sam zapis nie powoduje wysłania odpowiedzi. Istniejąca obsługa finalizacji może wysłać odpowiedź wyłącznie w reakcji na żądanie hosta.
+
+Hostowe potwierdzenie odpowiedzi, inna runda lub gra, zakończenie odpowiadania, `host:room-closed`, trwałe odrzucenie wznowienia i świadome wyjście usuwają draft danej sesji. Puste odpowiedzi bez zamrożonej finalizacji nie tworzą trwałego rekordu. Zapis, odczyt i cleanup sprawdzają bieżącą dzierżawę karty; poprzedni właściciel po przejęciu nie może nadpisać ani usunąć wspólnego draftu.
+
+Uszkodzony zapis, przekroczone limity lub niedostępny storage nie blokują gry. Drafty mogą zawierać prywatne wpisy gracza i podlegają tym samym ograniczeniom współdzielonego profilu i originu co kontekst reconnect.
+
+Testy automatyczne symulują definitywne zamknięcie przez usunięcie `sessionStorage`, nowe otwarcie i ponowną autoryzację przez hosta. Fizyczne zamknięcie i otwarcie Chrome Android oraz Safari iOS z hostem Android nadal wymaga testu na urządzeniach przed domknięciem Issue #21.

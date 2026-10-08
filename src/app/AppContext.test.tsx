@@ -17,6 +17,7 @@ import {
   readLatestUnfinishedMultiplayerSession,
   saveUnfinishedMultiplayerSession,
 } from '../storage/unfinishedMultiplayerSessionStorage';
+import { persistentAnswerDraftStorageKey, readPersistentAnswerDraft } from '../storage/persistentAnswerDraftStorage';
 import { createSessionTabLease, sessionTabLeaseStorageKey } from '../storage/sessionTabLease';
 import { AppProvider, useApp, type AppActions } from './AppContext';
 
@@ -86,8 +87,8 @@ function Harness({ onActions }: { onActions: (value: AppActions) => void }) {
 
 const captureActions = (value: AppActions): void => { actions = value; };
 
-function renderProvider(factory: () => GameTransport): void {
-  render(<AppProvider transportFactory={factory}><Harness onActions={captureActions} /></AppProvider>);
+function renderProvider(factory: () => GameTransport): ReturnType<typeof render> {
+  return render(<AppProvider transportFactory={factory}><Harness onActions={captureActions} /></AppProvider>);
 }
 
 function getTransport(transports: DeferredTransport[], index: number): DeferredTransport {
@@ -407,6 +408,8 @@ describe('AppProvider connection lifecycle', () => {
   it.each([
     ['room_full', 'Pokój jest pełny. Host ustawił limit graczy dla tej rozgrywki.'],
     ['game_already_started', 'Gra już się rozpoczęła. Poproś hosta o nowy pokój albo spróbuj później.'],
+    ['language_mismatch', 'The app language must match the room language.'],
+    ['invalid_reconnect_credential', 'Could not verify the player identity.'],
   ])('stops reconnect after terminal join rejection %s', async (code, message) => {
     vi.useFakeTimers();
     const transports: DeferredTransport[] = [];
@@ -432,7 +435,12 @@ describe('AppProvider connection lifecycle', () => {
     expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
 
     act(() => {
-      getTransport(transports, 0).emitMessage({ type: 'game:error', code, message });
+      getTransport(transports, 0).emitMessage({
+        type: 'game:error',
+        code,
+        message,
+        ...(code === 'language_mismatch' ? { gameLanguageCode: 'en' as const } : {}),
+      });
       getTransport(transports, 0).emitState('closed');
       window.dispatchEvent(new Event('online'));
       window.dispatchEvent(new Event('pageshow'));
@@ -443,7 +451,74 @@ describe('AppProvider connection lifecycle', () => {
     expect(currentState.connectionError).toBe(connectionFailureCodeForGameError(code));
     expect(getTransport(transports, 0).close).toHaveBeenCalled();
     expect(transports).toHaveLength(1);
-    expect(readLatestUnfinishedMultiplayerSession()).toBeNull();
+    if (code === 'language_mismatch') {
+      expect(readLatestUnfinishedMultiplayerSession()).not.toBeNull();
+      expect(currentState.requiredGameLanguageCode).toBe('en');
+    } else {
+      expect(readLatestUnfinishedMultiplayerSession()).toBeNull();
+      expect(currentState.requiredGameLanguageCode).toBeNull();
+    }
+  });
+
+  it('reacquires the tab lease before retrying after a language mismatch', async () => {
+    const transports: DeferredTransport[] = [];
+    renderProvider(() => {
+      const transport = new DeferredTransport();
+      transports.push(transport);
+      return transport;
+    });
+
+    let connectPromise!: Promise<void>;
+    act(() => { connectPromise = actions.connect(joinParameters); });
+    await act(async () => {
+      getTransport(transports, 0).open();
+      await connectPromise;
+    });
+    act(() => {
+      getTransport(transports, 0).emitMessage({
+        type: 'room:players',
+        protocolVersion: 4,
+        players: [currentState.identity.profile],
+      });
+      getTransport(transports, 0).emitMessage({
+        type: 'game:error',
+        code: 'language_mismatch',
+        message: 'The app language must match the room language.',
+        gameLanguageCode: 'en',
+      });
+    });
+
+    const otherTabLease = createSessionTabLease({
+      roomId: joinParameters.roomId,
+      hostSessionId: joinParameters.hostSessionId,
+      playerId: currentState.identity.playerId,
+    }, { ownerId: 'other-tab-after-language-mismatch' });
+    expect(otherTabLease.acquire()).toBe(true);
+
+    act(() => { actions.changeLanguageAndRetry('en'); });
+
+    expect(transports).toHaveLength(1);
+    expect(currentState.connectionStatus).toBe('error');
+    expect(currentState.connectionError).toBe(localConnectionFailureCodes.sessionInUse);
+
+    otherTabLease.release();
+    act(() => { actions.retry(); });
+    expect(transports).toHaveLength(2);
+
+    const retryPromise = getTransport(transports, 1).connect.mock.results[0]?.value as Promise<void>;
+    await act(async () => {
+      getTransport(transports, 1).open();
+      await retryPromise;
+    });
+
+    expect(getTransport(transports, 1).send).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ type: 'player:hello', appLanguageCode: 'en' }),
+    );
+    expect(getTransport(transports, 1).send).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ type: 'client:rejoin', appLanguageCode: 'en' }),
+    );
   });
 
   it('ignores stale callbacks and cancels pending retry after a successful reconnect', async () => {
@@ -550,6 +625,60 @@ describe('AppProvider connection lifecycle', () => {
     expect(currentState.connectionStatus).toBe('error');
     expect(currentState.connectionError).toBe(localConnectionFailureCodes.sessionInUse);
   });
+
+  for (const mode of ['same-round', 'done', 'submitted', 'new-round', 'review', 'closed'] as const) {
+    it(`recovers a closed tab only after host confirmation: ${mode}`, async () => {
+      const transports: DeferredTransport[] = [];
+      const factory = (): DeferredTransport => {
+        const transport = new DeferredTransport();
+        transports.push(transport);
+        return transport;
+      };
+      const firstTab = renderProvider(factory);
+      let connecting!: Promise<void>;
+      act(() => { connecting = actions.connect(joinParameters); });
+      await act(async () => { getTransport(transports, 0).open(); await connecting; });
+      const profile = currentState.identity.profile;
+      act(() => { getTransport(transports, 0).emitMessage({ type: 'game:snapshot', snapshot: answeringSnapshot(profile, 1) }); });
+      act(() => { actions.setAnswer('city', 'Augustów'); });
+      act(() => { window.dispatchEvent(new Event('pagehide')); });
+      expect(window.localStorage.getItem(persistentAnswerDraftStorageKey)).not.toBeNull();
+      firstTab.unmount();
+      window.sessionStorage.clear(); // A definitively closed tab loses this store.
+      const unfinished = readLatestUnfinishedMultiplayerSession();
+      if (!unfinished) throw new Error('Missing admitted resume context.');
+      const reopened = renderProvider(factory);
+      expect(currentState.answers).toEqual({});
+      act(() => { connecting = actions.connect(unfinished.target, unfinished); });
+      await act(async () => { getTransport(transports, 1).open(); await connecting; });
+      expect(currentState.answers).toEqual({}); // An open connection alone cannot restore.
+      const resumed = answeringSnapshot(profile, 2, {
+        ...(mode === 'done' ? { donePlayerIds: [profile.id] } : {}),
+        ...(mode === 'submitted' ? { submissions: { [profile.id]: { playerId: profile.id, playerName: profile.name, answers: { city: 'Accepted' } } } } : {}),
+        ...(mode === 'review' ? { phase: 'categoryReview' } : {}),
+      });
+      if (mode === 'new-round' && resumed.round) resumed.round = { ...resumed.round, number: 2 };
+      act(() => { getTransport(transports, 1).emitMessage(mode === 'closed'
+        ? { type: 'host:room-closed', gameId: joinParameters.roomId, shutdownId: 'closed-on-resume' }
+        : { type: 'game:snapshot', snapshot: resumed }); });
+      const scope = { hostSessionId: joinParameters.hostSessionId, roomId: joinParameters.roomId,
+        gameId: resumed.gameId, roundNumber: 1, playerId: profile.id };
+      if (mode === 'same-round') {
+        expect(currentState.answers.city).toBe('Augustów');
+        expect(readPersistentAnswerDraft(scope, { isOwner: () => true })?.answers.city).toBe('Augustów');
+        act(() => { actions.leaveGame(); });
+        expect(window.localStorage.getItem(persistentAnswerDraftStorageKey)).toBeNull();
+      } else {
+        expect(currentState.answers.city).not.toBe('Augustów');
+        expect(window.localStorage.getItem(persistentAnswerDraftStorageKey)).toBeNull();
+      }
+      const submissions = getTransport(transports, 1).send.mock.calls.map(([message]) => message)
+        .filter((message) => message.type === 'countries-cities:submit');
+      expect(submissions).toHaveLength(0);
+      reopened.unmount();
+      expect(window.localStorage.getItem(persistentAnswerDraftStorageKey)).toBeNull();
+    });
+  }
 
   it('freezes the current draft and reuses the same tagged submit for repeated finalization snapshots', async () => {
     const transports: DeferredTransport[] = [];

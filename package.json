@@ -11,6 +11,7 @@
     "design:validate": "node scripts/validate-design-system.mjs",
     "typecheck": "tsc -b --pretty false",
     "build": "npm run design:validate && tsc -b && vite build",
+    "build:pages": "node scripts/build-pages.mjs",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest",
