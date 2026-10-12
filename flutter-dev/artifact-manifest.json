@@ -1,0 +1,187 @@
+{
+  "files": {
+    ".last_build_id": {
+      "sha256": "612f081e9d84bf18564a4a1a46be6a5623ee60f88095b00575d3b29136661124",
+      "size": 32
+    },
+    "assets/AssetManifest.bin": {
+      "sha256": "a47057028b03c87d29f60fa1f038e23479ac5d439209ba26b0eb1df73c00e4fd",
+      "size": 933
+    },
+    "assets/AssetManifest.bin.json": {
+      "sha256": "46a757bf7670b17e76f4aa4456cb2781a696752cb817352f29e799afda3bda5f",
+      "size": 1246
+    },
+    "assets/FontManifest.json": {
+      "sha256": "28b1eb2b3d2e1ad60b8c8b0f9100b1ccbf492f7fa97f5bebb51ea97e73926e7d",
+      "size": 82
+    },
+    "assets/NOTICES": {
+      "sha256": "4cfe34efb82947a0aa1a237f25a3cf0b6330ae9545496f7fb19aa364dbb54751",
+      "size": 1388363
+    },
+    "assets/assets/audio/sfx/answer_correct.wav": {
+      "sha256": "1e23f31f4fba915cf35f61ac1456e8b4ea0625fc911eb5ab7f16f5d07c61a154",
+      "size": 14156
+    },
+    "assets/assets/audio/sfx/answer_duplicate.wav": {
+      "sha256": "a2b659e78b12037e9fe7dc678569022304cdcf0453c9490d43c9fe93993f069a",
+      "size": 10628
+    },
+    "assets/assets/audio/sfx/answer_submitted.wav": {
+      "sha256": "d5ff6b980cfb47497660805f5759a41800adcd9de51350448a40a8f1d9cd6323",
+      "size": 6218
+    },
+    "assets/assets/audio/sfx/answer_wrong.wav": {
+      "sha256": "01704c823ea892287e6354d02669c5db2f3b3a47d0bb30ab34f8cfb39d83f629",
+      "size": 11510
+    },
+    "assets/assets/audio/sfx/button_click.wav": {
+      "sha256": "8afb6c310abbea7ed02cc42582e434c58ae9066bfe33622073d35f468b387c63",
+      "size": 3572
+    },
+    "assets/assets/audio/sfx/countdown.wav": {
+      "sha256": "23c95937ed025ebaf3682f96b19ecbe4a5d91004db4c9c3d487ca0d2d4e53456",
+      "size": 7100
+    },
+    "assets/assets/audio/sfx/player_joined.wav": {
+      "sha256": "3312ff99359542aa1b9196ab10a271066b88da30ae4adbb44ad10116f4c8dfb3",
+      "size": 9746
+    },
+    "assets/assets/audio/sfx/round_end.wav": {
+      "sha256": "fce4c9284389fd495a676003aae7799851315e60e3ee7b61adabf857ed40124e",
+      "size": 16802
+    },
+    "assets/assets/audio/sfx/round_start.wav": {
+      "sha256": "3515c5af9f8f5f1c6ebb5d3ba107d970d737d2ab7dea7aa198863124bf541bff",
+      "size": 12392
+    },
+    "assets/assets/localized/en/branding/app_icon.png": {
+      "sha256": "ab710a2014b467965e352f4d5a0576c9ada5040eb3957a96d6448bb9dc92c2f8",
+      "size": 1454545
+    },
+    "assets/assets/localized/pl/branding/app_icon.png": {
+      "sha256": "57688d263fd05f34b8636d367e990a88e91b39fa4ad7d1fe762dd49c3ff3a412",
+      "size": 1169246
+    },
+    "assets/fonts/MaterialIcons-Regular.otf": {
+      "sha256": "725aa620859ba5b5695a1d5665d9b5a861729e4ea72392e3d28c2d547c141726",
+      "size": 17492
+    },
+    "assets/shaders/ink_sparkle.frag": {
+      "sha256": "2dca5ab93d4ec29e963f996f3916320ba60825e9537dfb149a68008c7a16b026",
+      "size": 8890
+    },
+    "assets/shaders/stretch_effect.frag": {
+      "sha256": "ab412f07a5b9b50b67a885b24dbe16929738ae28630407d6490c924caf0a3220",
+      "size": 6737
+    },
+    "canvaskit/canvaskit.js": {
+      "sha256": "7361b744487f98262f77ac507006b3eae37830430048ab7811a626b79f34a52c",
+      "size": 86859
+    },
+    "canvaskit/canvaskit.js.symbols": {
+      "sha256": "43dd0e78dfb29b1e3826c4ff987e9c5c982e51e1d28f40753f693f412dd1b298",
+      "size": 1357066
+    },
+    "canvaskit/canvaskit.wasm": {
+      "sha256": "6bdfaa51c76845c02ea90153d44f56f99da51de44a7ee0ea15ccaeb33ed8f476",
+      "size": 7229467
+    },
+    "canvaskit/chromium/canvaskit.js": {
+      "sha256": "d2aceb0e24ead163ab289a165ca0e26a36fa26d7118f5a295b8854d59d892896",
+      "size": 86496
+    },
+    "canvaskit/chromium/canvaskit.js.symbols": {
+      "sha256": "23a68c0f21677d699eaf86516fb2081556b313d1e429d61c4cb7fbfeb84d9986",
+      "size": 1274971
+    },
+    "canvaskit/chromium/canvaskit.wasm": {
+      "sha256": "c2fc2864763540922c71d464e983bebf97b3a5312fd01c6a8988969747d13314",
+      "size": 5760502
+    },
+    "canvaskit/experimental_webparagraph/canvaskit.js": {
+      "sha256": "803f7bab5f280fb6793495573bc83e6f70110916f75878a79c41e30b86585df8",
+      "size": 76497
+    },
+    "canvaskit/experimental_webparagraph/canvaskit.js.symbols": {
+      "sha256": "5746d266932128f390441e40139649b186e2c80322be100867b0aef69b34db0e",
+      "size": 1004464
+    },
+    "canvaskit/experimental_webparagraph/canvaskit.wasm": {
+      "sha256": "6b916e684369558b9a4fdd774fedf2717d7481cf0b7dffb28e084129512bbd3f",
+      "size": 4138344
+    },
+    "canvaskit/skwasm.js": {
+      "sha256": "e0316a798a929008cf9221d9ae0e8a4e0a5f07869ff2c0ad68a71f56ab9998a4",
+      "size": 63316
+    },
+    "canvaskit/skwasm.js.symbols": {
+      "sha256": "5e13d39db7315f06e6edd2cd3f4bf3a970bbf0cf33d128a38b6fccf4d25fec8b",
+      "size": 1541208
+    },
+    "canvaskit/skwasm.wasm": {
+      "sha256": "084a99454e405ad9e396803f5c02369562c92210ad9ff83a053ca68a1047a8f4",
+      "size": 3580947
+    },
+    "canvaskit/skwasm_heavy.js": {
+      "sha256": "fbf1c3374cd28b38ea4c48f8189012263c40e78e0a55323a557443c97a58c58c",
+      "size": 63429
+    },
+    "canvaskit/skwasm_heavy.js.symbols": {
+      "sha256": "5dbcc8bc79d9af9aba141a682ac0378f17242ae62b2338be2b979361694c8ca2",
+      "size": 1666301
+    },
+    "canvaskit/skwasm_heavy.wasm": {
+      "sha256": "8b8279650b1847d8259ad4591c5cb7cb635b513134ec7565f85b1aa4271d896c",
+      "size": 5172643
+    },
+    "canvaskit/wimp.js": {
+      "sha256": "3f2cc5ae040789508b6914897a9858389a496b3a7cadcc71ef120cca99f70586",
+      "size": 58396
+    },
+    "canvaskit/wimp.js.symbols": {
+      "sha256": "76ff1d41e82f50d8a9c49fe952b6859f7c59ed5e3afac60b4a7cca701ebec17d",
+      "size": 1801445
+    },
+    "canvaskit/wimp.wasm": {
+      "sha256": "781cd10fd4a893f0c30529b5e2a58822f91082da2dc135e2be696dfff85c6a73",
+      "size": 3514508
+    },
+    "flutter.js": {
+      "sha256": "a483fd28f51ed2fadd0da3fade5b672eba56310d549d736ce62eabf624a6a578",
+      "size": 9553
+    },
+    "flutter_bootstrap.js": {
+      "sha256": "ae9cc0f45bbcbbbc562e09d09486ce122172ba80c0453d7ae6065dc0e891dcf1",
+      "size": 9975
+    },
+    "flutter_service_worker.js": {
+      "sha256": "a131df5ca46154cc4eb79044f7f5a14029c2f8bfccf8cef34e3ec3b5a9f5a88c",
+      "size": 784
+    },
+    "index.html": {
+      "sha256": "b526e3952b7a06537d366f407d8d10285733c4b17593dcd6585c5b1b2fead667",
+      "size": 287
+    },
+    "main.dart.js": {
+      "sha256": "2f3a70958bfc9c2c0f63778bcf93d7131a39a2535f00d9eb25b269169877ec2b",
+      "size": 4120587
+    },
+    "source.json": {
+      "sha256": "22043f0c4f3c513b110385ee3bf5e6930040044dcf2b630aa666f9ffb7dacd4f",
+      "size": 187
+    },
+    "version.json": {
+      "sha256": "2f24b8a1044cf4e06e998a559938eafe89aba8f8a62b9a766b7a3d7a2655050e",
+      "size": 99
+    }
+  },
+  "source": {
+    "entrypoint": "lib/main_web.dart",
+    "environment": "dev",
+    "repository": "PawelWielga/panstwa-miasta",
+    "sha": "11e702df7632fecf3b63a8d1d2911ebeb06717ac"
+  },
+  "version": 1
+}
