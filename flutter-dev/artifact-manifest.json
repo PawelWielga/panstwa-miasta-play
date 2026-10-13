@@ -1,7 +1,7 @@
 {
   "files": {
     ".last_build_id": {
-      "sha256": "ba3d5421f63efa549f6a525e8817a6796957fc0d2711f12cfad91b9419bdc4b9",
+      "sha256": "3c2a315bf6f8cc19286eab11c281fa3b4d2312fa04ca4b0f23c25413d31678ec",
       "size": 32
     },
     "assets/AssetManifest.bin": {
@@ -153,8 +153,8 @@
       "size": 9553
     },
     "flutter_bootstrap.js": {
-      "sha256": "a668091a2ff7e31a62ac54e040605001c486668a49fb941cc6447aeba26139c6",
-      "size": 9974
+      "sha256": "92afdd794f2291ecf054488dd4ad88afd836ce33e62e94d934ce575ee59441af",
+      "size": 9975
     },
     "flutter_service_worker.js": {
       "sha256": "a131df5ca46154cc4eb79044f7f5a14029c2f8bfccf8cef34e3ec3b5a9f5a88c",
@@ -165,11 +165,11 @@
       "size": 287
     },
     "main.dart.js": {
-      "sha256": "3b6abb11b13d7208e3bf23666f645548d72d05cc04c96844c14dc106ce95ad18",
-      "size": 4121155
+      "sha256": "c51948c105d6496c6566bfc35301412ba86716a21e74cb0afda832c6e0414330",
+      "size": 4122864
     },
     "source.json": {
-      "sha256": "55a4dc2c3bc7fffd8c7a87e756bfc95c8e32fc495a2779d9314cdac6eb7c7870",
+      "sha256": "dd19ad1d279013b285d6b68fbba0f9a4174d779a4e35f65363f6ac4da3d18e88",
       "size": 187
     },
     "version.json": {
@@ -181,7 +181,7 @@
     "entrypoint": "lib/main_web.dart",
     "environment": "dev",
     "repository": "PawelWielga/panstwa-miasta",
-    "sha": "2967f2812aea54f4ee51a7a6be8b79ff75df265f"
+    "sha": "becebb6561ba024cf8f6f50c9916ad28e4c4850b"
   },
   "version": 1
 }
