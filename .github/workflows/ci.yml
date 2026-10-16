@@ -6,10 +6,14 @@ on:
       - main
       - dev
       - feature/peerjs-web-client
+    paths-ignore:
+      - '**/*.md'
   pull_request:
     branches:
       - main
       - dev
+    paths-ignore:
+      - '**/*.md'
 
 permissions:
   contents: read

@@ -4,6 +4,79 @@
 
 Statyczny klient przeglądarkowy gry **Państwa Miasta**. Gracz dołącza z telefonu, tabletu lub komputera do rozgrywki hostowanej przez aplikację Android.
 
+## Wspólny Flutter Web na DEV
+
+Aktualny DEV korzysta ze wspólnego klienta Flutter budowanego w
+[`PawelWielga/panstwa-miasta`](https://github.com/PawelWielga/panstwa-miasta),
+na branchu `dev`, z entrypointu `lib/main_web.dart`. Ekrany, ARB PL/EN, modele
+i logika klienta są utrzymywane w tamtym repo. Nie rozwijamy ich równolegle
+w TypeScript. Android pozostaje hostem i jedynym źródłem decyzji gry.
+
+| Adres | Źródło publikacji |
+| --- | --- |
+| `/panstwa-miasta-play/dev/` | Kompletny artefakt Flutter w `flutter-dev/` na branchu `dev` tego repo |
+| `/panstwa-miasta-play/` | Dotychczasowy klient TypeScript z `main`; produkcji nie przełączono |
+
+Źródła TypeScript poniżej pozostają zachowane dla obecnej produkcji i
+awaryjnego powrotu DEV. Sekcje dotyczące React, STUN-only i uruchamiania Vite
+opisują właśnie ten starszy klient, nie bieżący build Flutter DEV.
+Wspólna konfiguracja TURN DEV jest utrzymywana w repo Androida; dane konta
+nie trafiają do tego repo ani artefaktu WWW.
+
+### Publikacja, aktualizacja i dane
+
+Po zmianie kodu w źródłowym `dev` workflow Flutter wykonuje analizę, testy,
+build release i manifest SHA-256, następnie zapisuje gotowy katalog
+`flutter-dev/` przez dedykowany deploy key tego repo. Pages kopiuje go pod
+DEV bez ponownego budowania UI. Zmiany wyłącznie Markdown nie uruchamiają
+tych buildów; ręczne workflow pozostają dostępne.
+
+`/dev/source.json` wskazuje pełny source SHA, repo, przebieg źródłowego CI,
+entrypoint i środowisko. `/deployment.json` opisuje rewizje repo
+publikacyjnego i produkcji. SHA źródeł i publikacji to różne identyfikatory.
+Manifest sprawdza kompletność plików, bazę URL DEV i publiczny status online;
+nie jest dowodem zachowania istniejącego cache przeglądarki.
+
+Flutter izoluje dane po ścieżce i środowisku. Nie importuje sesji ani draftów
+TypeScript i nie usuwa jego starych danych. Zmiana aplikacji nie zachowuje
+aktywnego WebRTC: zakończ starą grę i dołącz ponownie. Przy znanych dawnych
+zapisach Flutter pokazuje informację PL/EN. TypeScript nie odczytuje zapisów
+Fluttera; powrót do niego również wymaga świadomego ponownego dołączenia.
+
+### Odzyskiwanie DEV
+
+1. Wybierz wcześniej zaakceptowany commit artefaktów i jego source SHA.
+   Sprawdź kompletny katalog narzędziem `tool/ci/web_artifact.py verify`
+   z repo źródłowego, podając wybrany pełny source SHA.
+2. Na `dev` tego repo odtwórz **cały** `flutter-dev/` z tego commita,
+   zapisz osobny commit i wykonaj push. Nie mieszaj plików różnych buildów,
+   nie cofaj źródłowego brancha i nie zmieniaj main.
+3. Sprawdź start Pages i zakończ turę agenta. Wynik sprawdzaj dopiero po
+   wiadomości właściciela. Następnie porównaj publiczne source.json i działanie
+   DEV w dotychczasowym profilu z cache. Powrót do nowszego zestawu wykonuje
+   się analogicznie, odtwarzając cały wybrany katalog.
+
+Usunięcie `flutter-dev/` włącza fallback TypeScript DEV przy kolejnym Pages.
+Przed takim krokiem trzeba zachować `/dev/online-service-status.json`, którego
+obecny APK DEV wymaga do nowych włączeń online; dawny build TS sam go nie
+dostarcza. Status jest publiczną flagą, nigdy magazynem poświadczeń TURN.
+Kolejny push kodu źródłowego może ponownie opublikować Fluttera — dłuższe
+wycofanie wymaga osobnej decyzji o zatrzymaniu joba publikacji źródeł.
+
+### Polityka TypeScript i produkcji
+
+Do przyjęcia migracji pozostawiamy źródła i historię TS. Pages nadal buduje
+produkcję z main; brak artefaktu Flutter uruchamia TS tylko jako fallback DEV.
+Po osobnej decyzji release należy przygotować produkcyjny artefakt Flutter
+z właściwą bazą URL i środowiskiem, zachować ostatni działający artefakt TS
+do rollbacku, a dopiero po przyjęciu zastępstwa zarchiwizować aktywny kod
+TS i wyłączyć jego build w flow Pages. Nie utrzymywać drugich tłumaczeń WWW.
+Nie wykonano tu merge do main, archiwizacji TS ani przełączenia produkcji.
+
+Szczegółowa [procedura publikacji i plan przełączenia](https://github.com/PawelWielga/panstwa-miasta/blob/dev/docs/flutter-web-dev-publication.md)
+oraz [raport migracji DEV](https://github.com/PawelWielga/panstwa-miasta/blob/dev/docs/release-qa/2026-10-16-web-dev-migration-gate.md)
+są utrzymywane w repo źródłowym.
+
 ## Architektura
 
 ```text
@@ -141,7 +214,8 @@ W aktualnym protokole wyłącznie host Android może oceniać odpowiedzi oraz ko
 Workflow `.github/workflows/pages.yml` po pushu do `dev` lub `main`:
 
 1. pobiera źródła `main` i `dev`,
-2. instaluje zależności i buduje obie wersje do `dist-pages`,
+2. buduje produkcyjny TypeScript z `main` i kopiuje gotowy Flutter DEV
+   z `flutter-dev/` do `dist-pages`; bez tego katalogu buduje fallback TS DEV,
 3. publikuje artefakt przez oficjalne GitHub Pages Actions,
 4. sprawdza HTML i JavaScript produkcji oraz wersji DEV.
 
@@ -150,12 +224,15 @@ Workflow `.github/workflows/pages.yml` po pushu do `dev` lub `main`:
 Paczka Pages zawiera dwie niezależne wersje klienta:
 
 - `/panstwa-miasta-play/` — kod z `main`,
-- `/panstwa-miasta-play/dev/` — kod z `dev`.
+- `/panstwa-miasta-play/dev/` — gotowy artefakt Flutter z `flutter-dev/`
+  na `dev`, a bez niego fallback TypeScript z `dev`.
 
 Dla własnej domeny z `VITE_BASE_PATH=/` są to odpowiednio `/` i `/dev/`.
 Build wersji testowej nie scala `dev` do `main` i nie zastępuje produkcji kodem z `dev`.
-Workflow `pages.yml` publikuje obie wersje po pushu. Osobny workflow CI może
-pozostać wyłączony; publikacja wykonuje build i sprawdza dostępność obu adresów.
+Workflow `pages.yml` publikuje obie wersje po pushu zmieniającym pliki poza
+Markdown. CI TypeScript kontroluje zachowany kod TS; testy i build wspólnego
+klienta Flutter należą do CI repo źródłowego. Pages sprawdza dostępność obu
+adresów i zgodność source SHA opublikowanego Flutter DEV.
 Reguła środowiska GitHub `github-pages` musi dopuszczać branch `dev`.
 Po przyszłym scaleniu do `main` ten sam workflow zachowa `/dev/` także przy
 publikacji z `main`; starszy workflow na `main` nie zawiera jeszcze tej obsługi.
