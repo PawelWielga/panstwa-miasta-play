@@ -31140,6 +31140,7 @@ bqx(a,b){var s,r=b==null?null:b.gel().toLowerCase()
 A:{s="assets/localized/pl/branding/app_icon.png"
 if("pl"===r)break A
 if("en"===r){s="assets/localized/en/branding/app_icon.png"
+break A}if("de"===r){s="assets/localized/de/branding/app_icon.png"
 break A}break A}return s},
 aw6:function aw6(){},
 ma(a,b){var s=A.bB(a,null),r=s==null?null:s.ax
