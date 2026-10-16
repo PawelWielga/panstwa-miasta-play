@@ -1,7 +1,7 @@
 {
   "files": {
     ".last_build_id": {
-      "sha256": "1362370a2a6d9b0abc157ec756733a95382e0cfcf489f88d2dfeb330bac3c21c",
+      "sha256": "a59f2aae61dfc887f7723603f1159e094da2ad133909238e47bd9de1f9faa698",
       "size": 32
     },
     "assets/AssetManifest.bin": {
@@ -153,7 +153,7 @@
       "size": 9553
     },
     "flutter_bootstrap.js": {
-      "sha256": "6b49e35b299667fcbe36fcbdbfb8d917cf0b8ade88d80e6877c6a72beb6523b9",
+      "sha256": "64028108563513aa63672b797c4aa93962c84847a0ee74ef4a28177c53bd1045",
       "size": 9975
     },
     "flutter_service_worker.js": {
@@ -173,7 +173,7 @@
       "size": 52
     },
     "source.json": {
-      "sha256": "ae81e71b90bf8e78ff16501a09d3233b61db765db8503b2e5a3eb21adde0618f",
+      "sha256": "617e1ef4c511dc4f81caaec82b754c451e00eeaae3a0647a3932acd1da2444dc",
       "size": 187
     },
     "version.json": {
@@ -185,7 +185,7 @@
     "entrypoint": "lib/main_web.dart",
     "environment": "dev",
     "repository": "PawelWielga/panstwa-miasta",
-    "sha": "71c0e7867c4568dea12cc48245f39d2194eccdc1"
+    "sha": "8f669aaab168e53cf5b54ed9afcd473a8a4b3b5b"
   },
   "version": 1
 }
