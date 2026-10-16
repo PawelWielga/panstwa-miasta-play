@@ -1,7 +1,7 @@
 {
   "repository": "PawelWielga/panstwa-miasta",
-  "sha": "8f669aaab168e53cf5b54ed9afcd473a8a4b3b5b",
-  "run": "38877253425",
+  "sha": "71c0e7867c4568dea12cc48245f39d2194eccdc1",
+  "run": "38886187524",
   "entrypoint": "lib/main_web.dart",
   "environment": "dev"
 }
