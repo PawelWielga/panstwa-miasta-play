@@ -1,16 +1,16 @@
 {
   "files": {
     ".last_build_id": {
-      "sha256": "36e39141ac4a208df9221875a5a1a1b6921dd7b5b8b5452dd6ca3126c2c60ebd",
+      "sha256": "f9ade68f20678884c14dc5c5ed785faa554e5e3d2f0647cf9e3fa6f816f48e12",
       "size": 32
     },
     "assets/AssetManifest.bin": {
-      "sha256": "8edbc42c07502886e3348e5adce0b5a1709433c8a11b69483fe7a9638b9577e3",
-      "size": 1030
+      "sha256": "b7c2d827a9f556e5ca59f7becc0c05e66edcf747e282238e78e99b5e9ff2786b",
+      "size": 1351
     },
     "assets/AssetManifest.bin.json": {
-      "sha256": "85dc8714fbe9c0b00dca1e2f38de9239888db7edbfa0f62b6ef898143f4e2f7c",
-      "size": 1378
+      "sha256": "4c7241b58ce5252b9b64b71ecc58fe0365d44a6a91d0073e1c0b45f6c0a47b4e",
+      "size": 1806
     },
     "assets/FontManifest.json": {
       "sha256": "28b1eb2b3d2e1ad60b8c8b0f9100b1ccbf492f7fa97f5bebb51ea97e73926e7d",
@@ -60,13 +60,25 @@
       "sha256": "e8e8e01cf4df2a45847c47d79fb6f8e403bb8134047f5f4b7283c6c8360c89f4",
       "size": 1729264
     },
+    "assets/assets/localized/de/branding/home_wordmark.png": {
+      "sha256": "b406fbb7b3d4a28ad42faad5c3dd14afd47a0160e45aa3205ef7cbb0ee31568e",
+      "size": 1624578
+    },
     "assets/assets/localized/en/branding/app_icon.png": {
       "sha256": "ab710a2014b467965e352f4d5a0576c9ada5040eb3957a96d6448bb9dc92c2f8",
       "size": 1454545
     },
+    "assets/assets/localized/en/branding/home_wordmark.png": {
+      "sha256": "f18ce39ae8f520fa109aa0dc45fb959d1a187f334d6e50d7be12cc89c3178927",
+      "size": 1490426
+    },
     "assets/assets/localized/pl/branding/app_icon.png": {
       "sha256": "57688d263fd05f34b8636d367e990a88e91b39fa4ad7d1fe762dd49c3ff3a412",
       "size": 1169246
+    },
+    "assets/assets/localized/pl/branding/home_wordmark.png": {
+      "sha256": "276753d52e70d76c3a71ef16f5e69d339d0199530570ca9396f6ffb537290843",
+      "size": 1446836
     },
     "assets/fonts/MaterialIcons-Regular.otf": {
       "sha256": "725aa620859ba5b5695a1d5665d9b5a861729e4ea72392e3d28c2d547c141726",
@@ -157,7 +169,7 @@
       "size": 9553
     },
     "flutter_bootstrap.js": {
-      "sha256": "c00df70ec9090bf564089cc62b06a1afa4bb7bb580f452c938a09f4dff7ffc98",
+      "sha256": "bb7c8ee693f651356fccb2c79c66fee6c709075f2d366b0f37bf469e9aa53ae7",
       "size": 9975
     },
     "flutter_service_worker.js": {
@@ -177,7 +189,7 @@
       "size": 52
     },
     "source.json": {
-      "sha256": "d22c51300e995e278d4445a5e595ae5ef39fe481202b0e024eceefcde244ef61",
+      "sha256": "1ad5e5fef6fc20927ad52e3aae6cf531ca37b71e50f800d842f0194ba9090a06",
       "size": 187
     },
     "version.json": {
@@ -189,7 +201,7 @@
     "entrypoint": "lib/main_web.dart",
     "environment": "dev",
     "repository": "PawelWielga/panstwa-miasta",
-    "sha": "6ae6396610f30ce84026815b231cbb39e4fbfb4e"
+    "sha": "455c7f9ce4cf1b47f791d913b1e096c6b02b3635"
   },
   "version": 1
 }
