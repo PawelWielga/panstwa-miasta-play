@@ -1,16 +1,16 @@
 {
   "files": {
     ".last_build_id": {
-      "sha256": "f9ade68f20678884c14dc5c5ed785faa554e5e3d2f0647cf9e3fa6f816f48e12",
+      "sha256": "9476380ef0e137b0ebe7647ca0df45f724a78139674b58078580631d317e7481",
       "size": 32
     },
     "assets/AssetManifest.bin": {
-      "sha256": "b7c2d827a9f556e5ca59f7becc0c05e66edcf747e282238e78e99b5e9ff2786b",
-      "size": 1351
+      "sha256": "570e542bca9ccbb855f75f1a90e229f7345a6c60aea8ca2c916102bdd968e2b7",
+      "size": 1519
     },
     "assets/AssetManifest.bin.json": {
-      "sha256": "4c7241b58ce5252b9b64b71ecc58fe0365d44a6a91d0073e1c0b45f6c0a47b4e",
-      "size": 1806
+      "sha256": "880e8bd0714b4f6593fd81c7a71b7ea3d279bbe63437f95b6edac60d6a67a8af",
+      "size": 2030
     },
     "assets/FontManifest.json": {
       "sha256": "28b1eb2b3d2e1ad60b8c8b0f9100b1ccbf492f7fa97f5bebb51ea97e73926e7d",
@@ -79,6 +79,14 @@
     "assets/assets/localized/pl/branding/home_wordmark.png": {
       "sha256": "276753d52e70d76c3a71ef16f5e69d339d0199530570ca9396f6ffb537290843",
       "size": 1446836
+    },
+    "assets/assets/ui/home/background_left.png": {
+      "sha256": "82b1ed0361c85f1a7e51aceb417f9925f0d6020b98016ad3a1816b94e59f87fa",
+      "size": 529488
+    },
+    "assets/assets/ui/home/background_right.png": {
+      "sha256": "bd4d22fe6d2cd9b74e6543da57e9143fc121a68e942b506331158a0a5a14bf98",
+      "size": 534376
     },
     "assets/fonts/MaterialIcons-Regular.otf": {
       "sha256": "725aa620859ba5b5695a1d5665d9b5a861729e4ea72392e3d28c2d547c141726",
@@ -169,7 +177,7 @@
       "size": 9553
     },
     "flutter_bootstrap.js": {
-      "sha256": "bb7c8ee693f651356fccb2c79c66fee6c709075f2d366b0f37bf469e9aa53ae7",
+      "sha256": "da73f74067b8c3c98477f467f75fedf82238261ef516488993bf5881ab1a0e3b",
       "size": 9975
     },
     "flutter_service_worker.js": {
@@ -189,7 +197,7 @@
       "size": 52
     },
     "source.json": {
-      "sha256": "1ad5e5fef6fc20927ad52e3aae6cf531ca37b71e50f800d842f0194ba9090a06",
+      "sha256": "93827c839779ffbfd08921c65a11483e8723b70c876cc7a9d02b9c30f80acd49",
       "size": 187
     },
     "version.json": {
@@ -201,7 +209,7 @@
     "entrypoint": "lib/main_web.dart",
     "environment": "dev",
     "repository": "PawelWielga/panstwa-miasta",
-    "sha": "455c7f9ce4cf1b47f791d913b1e096c6b02b3635"
+    "sha": "ec8bd304f384097ee904d10fd6214ca247b0e03f"
   },
   "version": 1
 }
